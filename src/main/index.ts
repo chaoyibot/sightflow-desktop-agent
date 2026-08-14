@@ -11,7 +11,7 @@ import { RPADevice } from '../core/rpa-device'
 const StoreClass = typeof Store === 'function' ? Store : ((Store as any).default as typeof Store)
 const settingsStore = new StoreClass({
   name: 'settings',
-  defaults: { apiKey: '', model: '', baseURL: '', systemPrompt: '', locale: 'zh' }
+  defaults: { apiKey: '', model: '', baseURL: '', systemPrompt: '', locale: 'zh', promptTemplates: [] }
 })
 
 let engine: Engine | null = null
@@ -99,12 +99,20 @@ app.whenReady().then(async () => {
           apiKey: config.apiKey,
           model: config.model,
           baseURL: config.baseURL,
-          systemPrompt: config.systemPrompt
+          systemPrompt: config.systemPrompt,
+          // 主回复也是截图视觉任务，必须用支持图片输入的模型
+          visionModel: config.visionModel || 'doubao-seed-2.0-lite'
         }
       })
       const device = new RPADevice()
       device.setAppType(config.appType || 'weixin')
-      device.setApiKey(config.apiKey)
+      // 传完整配置：主模型用于文本回复，visionModel 固定为视觉模型（VLM 布局检测必须支持图片输入）
+      device.setAiConfig({
+        apiKey: config.apiKey,
+        model: config.model,
+        baseURL: config.baseURL,
+        visionModel: config.visionModel || 'doubao-seed-2.0-lite'
+      })
       const mainWindow = BrowserWindow.getAllWindows()[0]
       engine = new Engine(localHooks, device, (type, content) => {
         if (mainWindow && !mainWindow.isDestroyed()) {

@@ -11,7 +11,7 @@ export class MockDevice implements DesktopDevice {
     // Mock 不依赖窗口类型
   }
 
-  setApiKey(_apiKey: string): void {
+  setAiConfig(_config: { apiKey: string; model?: string; baseURL?: string; visionModel?: string }): void {
     // Mock: 不需要 API key
   }
 

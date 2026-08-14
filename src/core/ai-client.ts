@@ -11,10 +11,13 @@ export interface AIClientConfig {
   model: string
   baseURL: string
   systemPrompt: string
+  /** VLM 视觉模型（截图分析/VLM检测专用，需支持图片输入；默认取 model） */
+  visionModel?: string
 }
 
-const DEFAULT_MODEL = 'doubao-seed-2-0-lite-260215'
-const DEFAULT_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
+// Coding Plan 通道默认值（模型名用官方支持的 doubao-seed-2.0-lite）
+const DEFAULT_MODEL = 'doubao-seed-2.0-lite'
+const DEFAULT_BASE_URL = 'https://ark.cn-beijing.volces.com/api/coding/v3'
 
 const REPLY_SYSTEM_PROMPT = `你是一个微信自动回复助手。你会收到一张微信/企业微信的聊天窗口截图。
 
@@ -125,16 +128,20 @@ export class AIClient {
       ? rawBase64
       : `data:image/png;base64,${rawBase64}`
 
-    const data = await this.callAPI([
-      { role: 'system', content: systemPrompt },
-      {
-        role: 'user',
-        content: [
-          { type: 'image_url', image_url: { url: imageUrl } },
-          { type: 'text', text: userText }
-        ]
-      }
-    ])
+    const data = await this.callAPI(
+      [
+        { role: 'system', content: systemPrompt },
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: imageUrl } },
+            { type: 'text', text: userText }
+          ]
+        }
+      ],
+      // 视觉调用优先用 visionModel（如主模型是纯文本模型，这里必须指定视觉模型）
+      this.config.visionModel || this.config.model
+    )
 
     return this.extractText(data)
   }
@@ -144,21 +151,21 @@ export class AIClient {
    * thinking 字段是火山方舟对标 OpenAI Responses API 的扩展参数，
    * 在非火山供应商上会被忽略，放在这里不影响兼容性
    */
-  private async callAPI(messages: any[]): Promise<any> {
+  private async callAPI(messages: any[], modelOverride?: string): Promise<any> {
     const url = `${this.config.baseURL}/chat/completions`
     const TIMEOUT_MS = 30_000 // 30 秒超时
     const callStart = Date.now()
 
     // 计算 payload 大小（粗略，不重复序列化）
     const bodyStr = JSON.stringify({
-      model: this.config.model,
+      model: modelOverride || this.config.model,
       messages,
       thinking: { type: 'disabled' },
       stream: false
     })
     const bodySizeKB = (bodyStr.length / 1024).toFixed(0)
     console.log(
-      `[AIClient] callAPI 开始 | model=${this.config.model} | payload=${bodySizeKB}KB | timeout=${TIMEOUT_MS / 1000}s`
+      `[AIClient] callAPI 开始 | model=${modelOverride || this.config.model} | payload=${bodySizeKB}KB | timeout=${TIMEOUT_MS / 1000}s`
     )
 
     const controller = new AbortController()

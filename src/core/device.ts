@@ -11,7 +11,7 @@ import { BBox } from './rpa/vision-utils'
 export interface DesktopDevice {
   // ── 配置 ──
   setAppType(appType: AppType): void
-  setApiKey(apiKey: string): void
+  setAiConfig(config: { apiKey: string; model?: string; baseURL?: string; visionModel?: string }): void
 
   // ── 感知层 ──
 
