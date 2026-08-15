@@ -146,6 +146,20 @@ export class RPADevice implements DesktopDevice {
     return result.screenshot
   }
 
+  /**
+   * 仅聊天区截图（chatMainArea）→ base64
+   * 手动模式下 AI 判断用：排除输入框残留文字干扰，避免 AI 误判"已回复"而 SKIP
+   */
+  async screenshotChatArea(): Promise<string> {
+    const { captureChatMainArea } = await import('./rpa/screenshot-utils')
+    const image = await captureChatMainArea(this.appType)
+    if (!image) {
+      // 兜底：聊天区截图失败时退回全窗口截图
+      return this.screenshot()
+    }
+    return image.toDataURL()
+  }
+
   async hasUnreadMessage(): Promise<{
     hasUnread: boolean
     chatEntranceArea?: { bbox: BBox; coordinates: [number, number] }

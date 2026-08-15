@@ -102,7 +102,11 @@ export class Engine {
    */
   private async processCurrentChat() {
     // 发图
-    const screenshot = await this.device.screenshot()
+    // 手动模式：只用聊天区截图（排除输入框残留干扰，避免 AI 误判已回复而 SKIP）
+    // 自动模式：全窗口截图
+    const screenshot = this.replyMode === 'manual'
+      ? await this.device.screenshotChatArea()
+      : await this.device.screenshot()
     this.emitLog('thinking', '截图完成，请求 AI 分析...')
 
     // 回复

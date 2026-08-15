@@ -24,6 +24,9 @@ export interface DesktopDevice {
   /** 全窗口截图 → base64 */
   screenshot(): Promise<string>
 
+  /** 仅聊天区截图（chatMainArea）→ base64；手动模式下用于 AI 判断，排除输入框残留干扰 */
+  screenshotChatArea(): Promise<string>
+
   /**
    * Step 1 粗检测：聊天入口是否有红点？
    * 内部流程: VLM 定位 chatEntranceArea → 局部 crop → 红点像素扫描
