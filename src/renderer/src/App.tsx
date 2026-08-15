@@ -283,6 +283,10 @@ function SettingsPanel() {
   const [systemPrompt, setSystemPrompt] = useState('')
   const [appType, setAppType] = useState<'weixin' | 'wework'>('weixin')
   const [replyMode, setReplyMode] = useState<'auto' | 'manual'>('auto')
+  // 定时发布任务
+  const [scheduledPosts, setScheduledPosts] = useState<{ id: string; time: string; content: string; enabled: boolean }[]>([])
+  const [postTime, setPostTime] = useState('09:00')
+  const [postContent, setPostContent] = useState('')
   const [testing, setTesting] = useState(false)
   const [, setLoaded] = useState(false)
   // 角色模板
@@ -298,6 +302,9 @@ function SettingsPanel() {
         setSystemPrompt(settings.systemPrompt || '')
         setAppType(settings.appType || 'weixin')
         setReplyMode(settings.replyMode === 'manual' ? 'manual' : 'auto')
+        if (Array.isArray(settings.scheduledPosts)) {
+          setScheduledPosts(settings.scheduledPosts)
+        }
         // 加载用户自定义模板（有则合并到预置模板之后）
         if (Array.isArray(settings.promptTemplates) && settings.promptTemplates.length > 0) {
           setTemplates([...BUILTIN_TEMPLATES, ...settings.promptTemplates])
@@ -349,6 +356,39 @@ function SettingsPanel() {
     showToast(`模板「${name}」已删除`, 'success')
   }, [templates, selectedTemplate])
 
+  /** 添加定时发布任务 */
+  const addScheduledPost = useCallback(() => {
+    const time = postTime?.trim()
+    const content = postContent?.trim()
+    if (!time || !content) {
+      showToast('请填写发布时间和文案内容', 'error')
+      return
+    }
+    if (!/^\d{2}:\d{2}$/.test(time)) {
+      showToast('时间格式应为 HH:MM，例如 09:30', 'error')
+      return
+    }
+    const post = {
+      id: `post_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      time,
+      content,
+      enabled: true
+    }
+    setScheduledPosts([...scheduledPosts, post])
+    setPostContent('')
+    showToast(`已添加定时任务 ${time}`, 'success')
+  }, [postTime, postContent, scheduledPosts])
+
+  /** 切换定时任务启用状态 */
+  const toggleScheduledPost = useCallback((id: string) => {
+    setScheduledPosts(scheduledPosts.map((p) => (p.id === id ? { ...p, enabled: !p.enabled } : p)))
+  }, [scheduledPosts])
+
+  /** 删除定时任务 */
+  const deleteScheduledPost = useCallback((id: string) => {
+    setScheduledPosts(scheduledPosts.filter((p) => p.id !== id))
+  }, [scheduledPosts])
+
   const handleSave = useCallback(async () => {
     await window.electron?.invoke('settings:set', {
       apiKey,
@@ -356,7 +396,8 @@ function SettingsPanel() {
       baseURL,
       systemPrompt,
       appType,
-      replyMode
+      replyMode,
+      scheduledPosts
     })
 
     window.electron?.invoke('engine:updateConfig', {
@@ -365,11 +406,12 @@ function SettingsPanel() {
       baseURL: baseURL || undefined,
       systemPrompt: systemPrompt || undefined,
       appType,
-      replyMode
+      replyMode,
+      scheduledPosts
     })
 
     showToast(t('settings.saved'), 'success')
-  }, [apiKey, model, baseURL, systemPrompt, appType, replyMode])
+  }, [apiKey, model, baseURL, systemPrompt, appType, replyMode, scheduledPosts])
 
   const handleTestConnection = useCallback(async () => {
     if (!apiKey) return
@@ -422,6 +464,79 @@ function SettingsPanel() {
           <div className="form-hint">
             手动模式下：AI 把回复内容粘贴到微信输入框，但不会自动发送，你确认后手动点发送按钮
           </div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">⏰ 定时发布计划</label>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+            <input
+              type="time"
+              className="form-input"
+              style={{ width: 110, flex: 'none' }}
+              value={postTime}
+              onChange={(e) => setPostTime(e.target.value)}
+            />
+            <input
+              className="form-input"
+              style={{ flex: 1 }}
+              placeholder="每天这个时间自动发这条文案（不经过大模型）"
+              value={postContent}
+              onChange={(e) => setPostContent(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') addScheduledPost()
+              }}
+            />
+            <button
+              className="btn btn-secondary"
+              style={{ whiteSpace: 'nowrap', padding: '6px 10px' }}
+              onClick={addScheduledPost}
+            >
+              ➕ 添加
+            </button>
+          </div>
+          <div className="form-hint">到点后自动把文案发到当前打开的对话窗口（请保持目标群/联系人打开）</div>
+          {scheduledPosts.length > 0 && (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {scheduledPosts.map((p) => (
+                <div
+                  key={p.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '6px 10px',
+                    borderRadius: 8,
+                    background: 'rgba(255,255,255,0.06)',
+                    border: p.enabled ? '1px solid rgba(80,160,255,0.35)' : '1px solid rgba(255,255,255,0.1)',
+                    opacity: p.enabled ? 1 : 0.55
+                  }}
+                >
+                  <span style={{ fontWeight: 600, color: p.enabled ? '#7cb5ff' : '#888', minWidth: 46 }}>
+                    {p.time}
+                  </span>
+                  <span style={{ flex: 1, fontSize: 12, color: '#bbb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {p.content}
+                  </span>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '2px 8px', fontSize: 11 }}
+                    onClick={() => toggleScheduledPost(p.id)}
+                    title={p.enabled ? '点击停用' : '点击启用'}
+                  >
+                    {p.enabled ? '✅ 启用' : '⏸ 停用'}
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '2px 8px', fontSize: 11, color: '#ff8080' }}
+                    onClick={() => deleteScheduledPost(p.id)}
+                    title="删除"
+                  >
+                    🗑
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="form-group">

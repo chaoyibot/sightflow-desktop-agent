@@ -13,10 +13,25 @@
 import { AgentHooks, ReplyAction, ActionItem } from './hooks'
 import { DesktopDevice } from './device'
 
+export interface ScheduledPost {
+  id: string
+  /** 触发时间 HH:MM（24小时制） */
+  time: string
+  /** 要发布的文案 */
+  content: string
+  /** 启用开关 */
+  enabled: boolean
+}
+
 export class Engine {
   private running = false
   private consecutiveUnreadFailures = 0
   private replyMode: 'auto' | 'manual' = 'auto'
+  /** 定时发布任务列表 */
+  private scheduledPosts: ScheduledPost[] = []
+  /** 已发送记录: taskId -> 日期字符串，防止同一天重复发送 */
+  private sentToday = new Map<string, string>()
+  private schedulerTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(
     private hooks: AgentHooks,
@@ -42,6 +57,9 @@ export class Engine {
   async start() {
     this.running = true
     await this.hooks.onEngineStart?.()
+
+    // 启动定时发布调度器（每 30 秒检查一次）
+    this.startScheduler()
 
     // 注册外部触发器
     this.hooks.onExternalTrigger?.((params) => {
@@ -88,11 +106,71 @@ export class Engine {
 
   stop() {
     this.running = false
+    this.stopScheduler()
     this.device.clearChatBaseline()
   }
 
   isRunning() {
     return this.running
+  }
+
+  // ── 定时发布 ──
+
+  /** 设置定时发布任务列表（由主进程透传 settings.scheduledPosts） */
+  setScheduledPosts(posts: ScheduledPost[]) {
+    this.scheduledPosts = Array.isArray(posts) ? posts : []
+    console.log(`[Engine] 定时发布任务已更新: ${this.scheduledPosts.length} 条`)
+  }
+
+  private startScheduler() {
+    if (this.schedulerTimer) return
+    // 每 30 秒检查一次到点任务
+    this.schedulerTimer = setInterval(() => {
+      this.checkScheduledPosts().catch((e) => {
+        this.emitLog('error', `定时发布异常: ${String(e)}`)
+      })
+    }, 30_000)
+    console.log('[Engine] 定时发布调度器已启动（每 30 秒检查）')
+    // 启动后立即检查一次（防止启动瞬间错过到点任务）
+    this.checkScheduledPosts().catch(() => {})
+  }
+
+  private stopScheduler() {
+    if (this.schedulerTimer) {
+      clearInterval(this.schedulerTimer)
+      this.schedulerTimer = null
+    }
+  }
+
+  /**
+   * 检查是否有到点的定时发布任务，有则直接发送（不经过大模型）
+   */
+  private async checkScheduledPosts() {
+    if (!this.running) return
+    if (this.scheduledPosts.length === 0) return
+
+    const now = new Date()
+    const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    const today = now.toDateString()
+
+    for (const post of this.scheduledPosts) {
+      if (!post.enabled) continue
+      if (!post.time || post.time.length !== 5) continue
+      if (post.time !== hhmm) continue
+
+      // 同一天已发送过则跳过
+      if (this.sentToday.get(post.id) === today) continue
+
+      this.sentToday.set(post.id, today)
+      this.emitLog('thinking', `⏰ 定时发布到点: ${post.time}`)
+      try {
+        // 定时发布是主动营销，始终直接发送（不跟随手动/自动模式）
+        await this.device.sendMessage(post.content, true)
+        this.emitLog('reply', `⏰ 定时发布已发送 (${post.time}): ${post.content.slice(0, 50)}...`)
+      } catch (e) {
+        this.emitLog('error', `定时发布发送失败: ${String(e)}`)
+      }
+    }
   }
 
   // ── Step 3+4: 发图 → 回复 ──

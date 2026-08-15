@@ -11,7 +11,7 @@ import { RPADevice } from '../core/rpa-device'
 const StoreClass = typeof Store === 'function' ? Store : ((Store as any).default as typeof Store)
 const settingsStore = new StoreClass({
   name: 'settings',
-  defaults: { apiKey: '', model: '', baseURL: '', systemPrompt: '', locale: 'zh', promptTemplates: [], replyMode: 'auto' }
+  defaults: { apiKey: '', model: '', baseURL: '', systemPrompt: '', locale: 'zh', promptTemplates: [], replyMode: 'auto', scheduledPosts: [] }
 })
 
 let engine: Engine | null = null
@@ -121,6 +121,8 @@ app.whenReady().then(async () => {
       })
       // 回复模式：auto=AI 自动发送；manual=AI 只粘贴，用户手动点发送
       engine.setReplyMode(config.replyMode === 'manual' ? 'manual' : 'auto')
+      // 定时发布任务列表
+      engine.setScheduledPosts(config.scheduledPosts || [])
       
       engine.start().catch((err: any) => {
         console.error('[Main] Engine loop error:', err)
@@ -151,6 +153,10 @@ app.whenReady().then(async () => {
       // 运行中切换回复模式（auto/manual 即时生效）
       if (engine && config.replyMode) {
         engine.setReplyMode(config.replyMode === 'manual' ? 'manual' : 'auto')
+      }
+      // 运行中更新定时发布任务（即时生效）
+      if (engine && Array.isArray(config.scheduledPosts)) {
+        engine.setScheduledPosts(config.scheduledPosts)
       }
       return { success: true }
     }
