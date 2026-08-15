@@ -168,6 +168,61 @@ app.whenReady().then(async () => {
     return client.testConnection()
   })
 
+  // ── 定时发布计划：AI 生成 ──
+  ipcMain.handle('scheduled:generate', async (_event, params: { description?: string }) => {
+    try {
+      const apiKey = (settingsStore.get('apiKey') as string) || ''
+      if (!apiKey) return { success: false, error: '请先在设置中填写 API Key' }
+      const model = (settingsStore.get('model') as string) || 'doubao-seed-2.0-lite'
+      const baseURL = (settingsStore.get('baseURL') as string) || 'https://ark.cn-beijing.volces.com/api/coding/v3'
+      const systemPrompt = (settingsStore.get('systemPrompt') as string) || ''
+
+      const description = params?.description?.trim()
+      if (!description) return { success: false, error: '请先描述你想要的发布计划' }
+
+      const client = new AIClient({ apiKey, model, baseURL, systemPrompt })
+      const prompt = `你是营销排期规划专家。请根据用户需求，规划一份"每天定时发布"的计划表。
+
+用户需求：
+${description}
+
+要求：
+1. 只输出一个 JSON 数组，格式：[{"time": "09:00", "content": "文案内容"}, {"time": "12:00", "content": "文案内容"}]
+2. 3~8 条任务，时间分布合理（避开深夜，间隔自然）
+3. 每条 content 是完整、可直接发送的推广文案（贴合用户需求，参考系统人设话术风格）
+4. 文案合规：不夸大宣传、不承诺疗效、不出现具体价格底价
+5. 不要输出任何解释、markdown 代码块标记，只输出 JSON 数组本身`
+
+      const result = await client.callText(prompt)
+      if (!result) return { success: false, error: 'AI 返回为空' }
+
+      // 提取 JSON 数组（容错：去除 ```json 包裹或前后杂文本）
+      const match = result.match(/\[[\s\S]*\]/)
+      if (!match) {
+        return { success: false, error: `AI 返回格式无法解析: ${result.slice(0, 200)}` }
+      }
+      const parsed = JSON.parse(match[0])
+      if (!Array.isArray(parsed)) return { success: false, error: 'AI 返回不是数组' }
+
+      // 规范化：只保留 time/content/enabled，校验时间格式
+      const posts = parsed
+        .filter((p: any) => p && typeof p.time === 'string' && typeof p.content === 'string')
+        .map((p: any) => ({
+          id: `post_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          time: p.time.trim(),
+          content: p.content.trim(),
+          enabled: true
+        }))
+        .filter((p: any) => /^\d{2}:\d{2}$/.test(p.time) && p.content)
+
+      if (posts.length === 0) return { success: false, error: 'AI 生成的计划为空或格式不正确' }
+
+      return { success: true, posts }
+    } catch (error: any) {
+      return { success: false, error: error?.message || String(error) }
+    }
+  })
+
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
 

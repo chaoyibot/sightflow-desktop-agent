@@ -287,6 +287,10 @@ function SettingsPanel() {
   const [scheduledPosts, setScheduledPosts] = useState<{ id: string; time: string; content: string; enabled: boolean }[]>([])
   const [postTime, setPostTime] = useState('09:00')
   const [postContent, setPostContent] = useState('')
+  // AI 生成计划
+  const [planDescription, setPlanDescription] = useState('')
+  const [generatingPlan, setGeneratingPlan] = useState(false)
+  const [generatedPlan, setGeneratedPlan] = useState<{ id: string; time: string; content: string; enabled: boolean }[] | null>(null)
   const [testing, setTesting] = useState(false)
   const [, setLoaded] = useState(false)
   // 角色模板
@@ -389,6 +393,39 @@ function SettingsPanel() {
     setScheduledPosts(scheduledPosts.filter((p) => p.id !== id))
   }, [scheduledPosts])
 
+  /** AI 生成发布计划 */
+  const generatePlan = useCallback(async () => {
+    const description = planDescription?.trim()
+    if (!description) {
+      showToast('请先描述你想要的发布计划', 'error')
+      return
+    }
+    setGeneratingPlan(true)
+    setGeneratedPlan(null)
+    try {
+      const result = await window.electron?.invoke('scheduled:generate', { description })
+      if (result?.success && Array.isArray(result.posts)) {
+        setGeneratedPlan(result.posts)
+        showToast(`AI 已生成 ${result.posts.length} 条计划，确认后点「全部加入」`, 'success')
+      } else {
+        showToast(`生成失败: ${result?.error || '未知错误'}`, 'error')
+      }
+    } catch (e: any) {
+      showToast(`生成失败: ${e.message}`, 'error')
+    } finally {
+      setGeneratingPlan(false)
+    }
+  }, [planDescription])
+
+  /** 一键把 AI 生成的计划全部加入任务列表 */
+  const addAllGenerated = useCallback(() => {
+    if (!generatedPlan || generatedPlan.length === 0) return
+    setScheduledPosts([...scheduledPosts, ...generatedPlan])
+    setGeneratedPlan(null)
+    setPlanDescription('')
+    showToast(`已加入 ${generatedPlan.length} 条定时任务，记得点「保存」生效`, 'success')
+  }, [generatedPlan, scheduledPosts])
+
   const handleSave = useCallback(async () => {
     await window.electron?.invoke('settings:set', {
       apiKey,
@@ -468,6 +505,61 @@ function SettingsPanel() {
 
         <div className="form-group">
           <label className="form-label">⏰ 定时发布计划</label>
+
+          {/* AI 生成计划区 */}
+          <textarea
+            className="form-input"
+            rows={2}
+            placeholder="🤖 用一句话描述你想要的计划，AI 自动排期生成。例如：每天早上9点发招商开场、中午12点发产品推介、下午3点发客户跟进话术、晚上8点发福利活动"
+            value={planDescription}
+            onChange={(e) => setPlanDescription(e.target.value)}
+            style={{ marginBottom: 6 }}
+          />
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+            <button
+              className="btn btn-secondary"
+              style={{ flex: 1 }}
+              onClick={generatePlan}
+              disabled={generatingPlan || !planDescription.trim()}
+            >
+              {generatingPlan ? '🤖 AI 排期中...' : '🤖 AI 生成计划'}
+            </button>
+            {generatedPlan && generatedPlan.length > 0 && (
+              <button
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                onClick={addAllGenerated}
+              >
+                ✅ 全部加入（{generatedPlan.length}条）
+              </button>
+            )}
+          </div>
+          {generatedPlan && generatedPlan.length > 0 && (
+            <div style={{ marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {generatedPlan.map((p, i) => (
+                <div
+                  key={p.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 8,
+                    padding: '6px 10px',
+                    borderRadius: 8,
+                    background: 'rgba(80,200,120,0.08)',
+                    border: '1px solid rgba(80,200,120,0.3)'
+                  }}
+                >
+                  <span style={{ fontWeight: 600, color: '#6fd88f', minWidth: 46 }}>
+                    {p.time}
+                  </span>
+                  <span style={{ flex: 1, fontSize: 12, color: '#ccc', lineHeight: 1.5 }}>
+                    {p.content}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
             <input
               type="time"
