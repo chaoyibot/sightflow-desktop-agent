@@ -21,3 +21,7 @@ out
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Local startup scripts
+start-*.bat
+start-log.txt
