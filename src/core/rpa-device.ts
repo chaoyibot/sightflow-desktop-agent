@@ -220,8 +220,8 @@ export class RPADevice implements DesktopDevice {
 
   // ── 动作层 ──
 
-  async sendMessage(text: string): Promise<void> {
-    const success = await sendReplyAction(this.appType, text)
+  async sendMessage(text: string, autoSend = true): Promise<void> {
+    const success = await sendReplyAction(this.appType, text, autoSend)
     if (!success) {
       throw new Error('发送消息失败')
     }

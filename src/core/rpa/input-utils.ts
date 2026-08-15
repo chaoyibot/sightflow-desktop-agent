@@ -120,9 +120,9 @@ const getWeChatInputPosition = (bounds: any, scaleFactor: number) => {
  * 1. 坐标计算：获取输入框焦点坐标
  * 2. 隐式鼠标点击目标输入框
  * 3. 推入剪贴板，Cmd+V注入
- * 4. Enter发送
+ * 4. Enter发送（autoSend=true 时）；手动模式下只粘贴不发送，等用户自己点发送按钮
  */
-export async function sendReplyAction(appType: AppType, text: string): Promise<boolean> {
+export async function sendReplyAction(appType: AppType, text: string, autoSend = true): Promise<boolean> {
   const windowInfo = await getWindowInfo(appType, false)
   if (!windowInfo || !windowInfo.bounds) {
     console.error('[sendReplyAction] 无法获取窗口信息')
@@ -176,6 +176,12 @@ export async function sendReplyAction(appType: AppType, text: string): Promise<b
     await randomDelayIn(300, 500)
     
     // 4. Send Message (Using whatsapp-agent-demo best practices)
+    // 手动模式（autoSend=false）：只粘贴到输入框，不按回车，等用户手动点发送按钮
+    if (!autoSend) {
+      console.log('[sendReplyAction] 手动模式：内容已粘贴到输入框，等待用户手动发送')
+      return true
+    }
+    
     robot.keyTap('enter')
     
     if (IS_WINDOWS) {

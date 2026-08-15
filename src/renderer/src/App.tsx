@@ -282,6 +282,7 @@ function SettingsPanel() {
   const [baseURL, setBaseURL] = useState('')
   const [systemPrompt, setSystemPrompt] = useState('')
   const [appType, setAppType] = useState<'weixin' | 'wework'>('weixin')
+  const [replyMode, setReplyMode] = useState<'auto' | 'manual'>('auto')
   const [testing, setTesting] = useState(false)
   const [, setLoaded] = useState(false)
   // 角色模板
@@ -296,6 +297,7 @@ function SettingsPanel() {
         setBaseURL(settings.baseURL || '')
         setSystemPrompt(settings.systemPrompt || '')
         setAppType(settings.appType || 'weixin')
+        setReplyMode(settings.replyMode === 'manual' ? 'manual' : 'auto')
         // 加载用户自定义模板（有则合并到预置模板之后）
         if (Array.isArray(settings.promptTemplates) && settings.promptTemplates.length > 0) {
           setTemplates([...BUILTIN_TEMPLATES, ...settings.promptTemplates])
@@ -353,7 +355,8 @@ function SettingsPanel() {
       model,
       baseURL,
       systemPrompt,
-      appType
+      appType,
+      replyMode
     })
 
     window.electron?.invoke('engine:updateConfig', {
@@ -361,11 +364,12 @@ function SettingsPanel() {
       model: model || undefined,
       baseURL: baseURL || undefined,
       systemPrompt: systemPrompt || undefined,
-      appType
+      appType,
+      replyMode
     })
 
     showToast(t('settings.saved'), 'success')
-  }, [apiKey, model, baseURL, systemPrompt, appType])
+  }, [apiKey, model, baseURL, systemPrompt, appType, replyMode])
 
   const handleTestConnection = useCallback(async () => {
     if (!apiKey) return
@@ -403,6 +407,21 @@ function SettingsPanel() {
             <option value="weixin">微信</option>
             <option value="wework">企业微信</option>
           </select>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">回复模式</label>
+          <select
+            className="form-input"
+            value={replyMode}
+            onChange={(e) => setReplyMode(e.target.value as any)}
+          >
+            <option value="auto">🤖 自动回复（AI 生成后自动发送）</option>
+            <option value="manual">✋ 手动回复（AI 只填入输入框，你点发送才发）</option>
+          </select>
+          <div className="form-hint">
+            手动模式下：AI 把回复内容粘贴到微信输入框，但不会自动发送，你确认后手动点发送按钮
+          </div>
         </div>
 
         <div className="form-group">

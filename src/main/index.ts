@@ -11,7 +11,7 @@ import { RPADevice } from '../core/rpa-device'
 const StoreClass = typeof Store === 'function' ? Store : ((Store as any).default as typeof Store)
 const settingsStore = new StoreClass({
   name: 'settings',
-  defaults: { apiKey: '', model: '', baseURL: '', systemPrompt: '', locale: 'zh', promptTemplates: [] }
+  defaults: { apiKey: '', model: '', baseURL: '', systemPrompt: '', locale: 'zh', promptTemplates: [], replyMode: 'auto' }
 })
 
 let engine: Engine | null = null
@@ -119,6 +119,8 @@ app.whenReady().then(async () => {
           mainWindow.webContents.send('engine:log', { type, content })
         }
       })
+      // 回复模式：auto=AI 自动发送；manual=AI 只粘贴，用户手动点发送
+      engine.setReplyMode(config.replyMode === 'manual' ? 'manual' : 'auto')
       
       engine.start().catch((err: any) => {
         console.error('[Main] Engine loop error:', err)
@@ -145,6 +147,10 @@ app.whenReady().then(async () => {
       localHooks.updateAIConfig(config)
       if (engine && config.appType) {
         (engine as any).device?.setAppType(config.appType)
+      }
+      // 运行中切换回复模式（auto/manual 即时生效）
+      if (engine && config.replyMode) {
+        engine.setReplyMode(config.replyMode === 'manual' ? 'manual' : 'auto')
       }
       return { success: true }
     }

@@ -16,13 +16,23 @@ import { DesktopDevice } from './device'
 export class Engine {
   private running = false
   private consecutiveUnreadFailures = 0
+  private replyMode: 'auto' | 'manual' = 'auto'
 
   constructor(
-
     private hooks: AgentHooks,
     private device: DesktopDevice,
     private onLog?: (type: string, content: string) => void
   ) {}
+
+  /** 设置回复模式：auto=AI 自动发送；manual=AI 只粘贴到输入框，用户手动点发送 */
+  setReplyMode(mode: 'auto' | 'manual') {
+    this.replyMode = mode
+    console.log(`[Engine] 回复模式已切换: ${mode}`)
+  }
+
+  getReplyMode(): 'auto' | 'manual' {
+    return this.replyMode
+  }
 
   private emitLog(type: 'thinking' | 'reply' | 'skip' | 'error', content: string) {
     if (this.onLog) this.onLog(type, content)
@@ -259,7 +269,8 @@ export class Engine {
       switch (action.type) {
         case 'text':
           this.emitLog('reply', `[回复] ${action.content}`)
-          await this.device.sendMessage(action.content)
+          // 手动模式：只粘贴不发送，用户手动点发送按钮；自动模式：粘贴+回车发送
+          await this.device.sendMessage(action.content, this.replyMode === 'auto')
           this.hooks.onActionComplete?.(
             { type: 'text', content: action.content } as ActionItem,
             { success: true }

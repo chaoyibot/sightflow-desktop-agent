@@ -1,0 +1,36 @@
+[2026/08/16 ÖÜÈÕ  6:28:47.69] starting 
+
+> sightflow-desktop-agent@1.0.0 start
+> electron-vite preview
+
+[36mvite v7.3.2 [32mbuilding ssr environment for production...[36m[39m
+transforming...
+[32mâœ“[39m 19 modules transformed.
+rendering chunks...
+[33m[plugin vite:reporter] 
+(!) C:/Users/Administrator/sightflow-desktop-agent/src/core/rpa/vision-utils.ts is dynamically imported by C:/Users/Administrator/sightflow-desktop-agent/src/core/rpa/screenshot-utils.ts but also statically imported by C:/Users/Administrator/sightflow-desktop-agent/src/core/rpa-device.ts, C:/Users/Administrator/sightflow-desktop-agent/src/core/rpa/has-unread.ts, C:/Users/Administrator/sightflow-desktop-agent/src/core/rpa/input-utils.ts, C:/Users/Administrator/sightflow-desktop-agent/src/core/rpa/tests/test-vlm-parallel.ts, dynamic import will not move module into another chunk.
+[39m
+[2mout/main/[22m[36mchunks/test-vlm-parallel-CLdIrkR_.js  [39m[1m[2m 1.09 kB[22m[1m[22m
+[2mout/main/[22m[36mtest-cli.js                           [39m[1m[2m 3.11 kB[22m[1m[22m
+[2mout/main/[22m[36mindex.js                              [39m[1m[2m15.73 kB[22m[1m[22m
+[2mout/main/[22m[36mchunks/rpa-device-Bzk5oT4R.js         [39m[1m[2m56.17 kB[22m[1m[22m
+[32mâœ“ built in 406ms[39m
+[36mvite v7.3.2 [32mbuilding ssr environment for production...[36m[39m
+transforming...
+[32mâœ“[39m 1 modules transformed.
+rendering chunks...
+[2mout/preload/[22m[36mindex.js  [39m[1m[2m0.81 kB[22m[1m[22m
+[32mâœ“ built in 53ms[39m
+[36mvite v7.3.2 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32mâœ“[39m 31 modules transformed.
+rendering chunks...
+[2m../../out/renderer/[22m[32mindex.html                 [39m[1m[2m  0.53 kB[22m[1m[22m
+[2m../../out/renderer/[22m[32massets/logo-B9lw2VMV.png   [39m[1m[2m133.08 kB[22m[1m[22m
+[2m../../out/renderer/[22m[35massets/index-Cb1ZXWi2.css  [39m[1m[2m 13.27 kB[22m[1m[22m
+[2m../../out/renderer/[22m[36massets/index-C71AIfrU.js   [39m[1m[33m578.43 kB[39m[22m
+[32mâœ“ built in 1.22s[39m
+[32m
+starting electron app...
+[39m
+
