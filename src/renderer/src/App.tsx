@@ -427,6 +427,15 @@ function SettingsPanel() {
   }, [generatedPlan, scheduledPosts])
 
   const handleSave = useCallback(async () => {
+    // 防呆：若 AI 生成的计划还在预览区（未点「全部加入」），保存时自动并入任务列表
+    let posts = scheduledPosts
+    let autoMerged = 0
+    if (generatedPlan && generatedPlan.length > 0) {
+      posts = [...scheduledPosts, ...generatedPlan]
+      setScheduledPosts(posts)
+      setGeneratedPlan(null)
+      autoMerged = generatedPlan.length
+    }
     await window.electron?.invoke('settings:set', {
       apiKey,
       model,
@@ -434,7 +443,7 @@ function SettingsPanel() {
       systemPrompt,
       appType,
       replyMode,
-      scheduledPosts
+      scheduledPosts: posts
     })
 
     window.electron?.invoke('engine:updateConfig', {
@@ -444,11 +453,16 @@ function SettingsPanel() {
       systemPrompt: systemPrompt || undefined,
       appType,
       replyMode,
-      scheduledPosts
+      scheduledPosts: posts
     })
 
-    showToast(t('settings.saved'), 'success')
-  }, [apiKey, model, baseURL, systemPrompt, appType, replyMode, scheduledPosts])
+    showToast(
+      autoMerged > 0
+        ? `${t('settings.saved')}（AI 生成的 ${autoMerged} 条计划已自动加入）`
+        : t('settings.saved'),
+      'success'
+    )
+  }, [apiKey, model, baseURL, systemPrompt, appType, replyMode, scheduledPosts, generatedPlan])
 
   const handleTestConnection = useCallback(async () => {
     if (!apiKey) return
