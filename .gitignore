@@ -25,3 +25,4 @@ Thumbs.db
 # Local startup scripts
 start-*.bat
 start-log.txt
+win-check.txt
