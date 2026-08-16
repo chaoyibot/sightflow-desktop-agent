@@ -98,14 +98,20 @@ app.whenReady().then(async () => {
       // - 视觉模型固定用 doubao（布局检测/红点检测/截图内容提取）—— 快速、输出 bbox 精确
       // - Hermes 只负责回复语言内容（纯文本决策，不处理图片，避免 17-25s agent 循环）
       // - 用户选 agnes 时：回复生成走 agnes（视觉仍 doubao）
+      // - ⚠️ doubao 有 5 小时用量配额（429 AccountQuotaExceeded），失败自动回退 agnes
       const DOUBAO_VISION = {
         apiKey: '74f1d573-a75a-4cbc-9018-84965afa6de7',
         model: 'doubao-seed-2.0-lite',
         baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3',
         visionModel: 'doubao-seed-2.0-lite'
       }
+      const AGNES_FALLBACK = {
+        apiKey: 'sk-YxmHWNWM97UiK2JDwm63KL6swaSwSUVA6jZW3bniz2UIVHkU',
+        model: 'agnes-2.5-flash',
+        baseURL: 'https://api.agnes-ai.cn/v1',
+        visionModel: 'agnes-2.5-flash'
+      }
       const isHermes = String(config.model || '').toLowerCase().includes('hermes-agent')
-      const isAgnes = String(config.model || '').toLowerCase().includes('agnes')
 
       // 回复生成：跟随 aiEngine（hermes → 本地 api_server 纯文本；agnes → agnes；默认 doubao）
       localHooks = new LocalHooks({
@@ -116,14 +122,14 @@ app.whenReady().then(async () => {
           systemPrompt: config.systemPrompt,
           visionModel: DOUBAO_VISION.visionModel
         },
-        // 视觉提取：固定 doubao（Hermes 模式用）
-        vision: DOUBAO_VISION,
+        // 视觉提取：doubao 优先，agnes 兜底（配额超限自动切换）
+        vision: { ...DOUBAO_VISION, fallbackVision: AGNES_FALLBACK },
         hermesMode: isHermes
       })
       const device = new RPADevice()
       device.setAppType(config.appType || 'weixin')
-      // 视觉检测（布局/红点 VLM）固定 doubao
-      device.setAiConfig(DOUBAO_VISION)
+      // 视觉检测（布局/红点 VLM）doubao 优先，agnes 兜底
+      device.setAiConfig({ ...DOUBAO_VISION, fallbackVision: AGNES_FALLBACK })
       const mainWindow = BrowserWindow.getAllWindows()[0]
       engine = new Engine(localHooks, device, (type, content) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -157,12 +163,18 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('engine:updateConfig', async (_event, config) => {
     if (localHooks) {
-      // 2026-08-16 定稿：视觉固定 doubao，回复引擎跟随用户选择
+      // 2026-08-16 定稿：视觉 doubao 优先+agnes 兜底，回复引擎跟随用户选择
       const DOUBAO_VISION = {
         apiKey: '74f1d573-a75a-4cbc-9018-84965afa6de7',
         model: 'doubao-seed-2.0-lite',
         baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3',
         visionModel: 'doubao-seed-2.0-lite'
+      }
+      const AGNES_FALLBACK = {
+        apiKey: 'sk-YxmHWNWM97UiK2JDwm63KL6swaSwSUVA6jZW3bniz2UIVHkU',
+        model: 'agnes-2.5-flash',
+        baseURL: 'https://api.agnes-ai.cn/v1',
+        visionModel: 'agnes-2.5-flash'
       }
       // 整个 config 透传（含 visionModel / apiKey / baseURL / model）
       localHooks.updateAIConfig(config)
@@ -172,9 +184,9 @@ app.whenReady().then(async () => {
       if (engine && config.appType) {
         (engine as any).device?.setAppType(config.appType)
       }
-      // 视觉检测固定 doubao（布局/红点 VLM 不受引擎切换影响）
+      // 视觉检测 doubao 优先 + agnes 兜底（布局/红点 VLM 不受引擎切换影响）
       if (engine) {
-        ;(engine as any).device?.setAiConfig?.(DOUBAO_VISION)
+        ;(engine as any).device?.setAiConfig?.({ ...DOUBAO_VISION, fallbackVision: AGNES_FALLBACK })
       }
       // 运行中切换回复模式（auto/manual 即时生效）
       if (engine && config.replyMode) {
