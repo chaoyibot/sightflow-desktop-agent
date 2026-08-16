@@ -103,6 +103,21 @@ export function parseBBoxes(text: string): BBox[] {
     }
   }
 
+  // 3. JSON 数组格式：[{"bbox_2d": [x1,y1,x2,y2], "label": "..."}]
+  //    agnes 有时输出 JSON 包裹的检测结果
+  if (bboxes.length === 0) {
+    const jsonRegex = /"bbox_2d"\s*:\s*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\]/gi
+    while ((match = jsonRegex.exec(text)) !== null) {
+      const x1 = Number(match[1])
+      const y1 = Number(match[2])
+      const x2 = Number(match[3])
+      const y2 = Number(match[4])
+      if ([x1, y1, x2, y2].every((v) => Number.isFinite(v))) {
+        bboxes.push([Math.round(x1), Math.round(y1), Math.round(x2), Math.round(y2)])
+      }
+    }
+  }
+
   return bboxes
 }
 
@@ -211,7 +226,12 @@ const UNREAD_AREA_PROMPTS: Record<'weixin' | 'wework', { prompt: string; targets
 ## 你的职责
 帮我框选以下两个区域，每个区域用 <bbox>x1,y1,x2,y2</bbox> 格式，坐标范围 0-1000：
 1. 【聊天入口按钮区域】— 导航栏中的聊天按钮，包含图标和红色角标
-2. 【有未读气泡的联系人头像】— 聊天列表中**头像右上角带红色未读气泡**的联系人（优先第一个有红点的；如果没有红点联系人就框列表第一行的头像区域）`,
+2. 【有未读气泡的联系人头像】— 聊天列表中**头像右上角带红色未读气泡**的联系人（优先第一个有红点的；如果没有红点联系人就框列表第一行的头像区域）
+
+## 输出格式（严格遵守）
+只输出两行 <bbox> 标签，不要 JSON、不要 markdown 代码块、不要任何解释或列表：
+<bbox>x1,y1,x2,y2</bbox>
+<bbox>x1,y1,x2,y2</bbox>`,
     targets: ['【聊天入口按钮区域】', '【有未读气泡的联系人头像】']
   },
   wework: {
@@ -225,7 +245,12 @@ const UNREAD_AREA_PROMPTS: Record<'weixin' | 'wework', { prompt: string; targets
 ## 你的职责
 帮我框选以下两个区域，每个区域用 <bbox>x1,y1,x2,y2</bbox> 格式，坐标范围 0-1000：
 1. 【消息按钮区域】— 左侧导航栏中的消息按钮区域，包含按钮和红色角标
-2. 【有未读红点的消息项头像】— 中间消息列表中**头像右上角带红色未读角标**的消息项（优先第一个有红点的；如果没有红点消息项就框列表第一行的头像区域）`,
+2. 【有未读红点的消息项头像】— 中间消息列表中**头像右上角带红色未读角标**的消息项（优先第一个有红点的；如果没有红点消息项就框列表第一行的头像区域）
+
+## 输出格式（严格遵守）
+只输出两行 <bbox> 标签，不要 JSON、不要 markdown 代码块、不要任何解释或列表：
+<bbox>x1,y1,x2,y2</bbox>
+<bbox>x1,y1,x2,y2</bbox>`,
     targets: ['【消息按钮区域】', '【有未读红点的消息项头像】']
   }
 }
@@ -424,7 +449,13 @@ const LAYOUT_DETECT_PROMPTS: Record<'weixin' | 'wework', { prompt: string; targe
 帮我框选以下三个区域，每个区域用 <bbox>x1,y1,x2,y2</bbox> 格式，坐标范围 0-1000：
 1. 【搜索输入框】— 聊天联系人列表顶部的搜索栏
 2. 【对话窗口header区域】— 对话区域最顶上一条，显示当前对话人的名称
-3. 【聊天记录区】— 对话区域中间部分，显示历史聊天气泡的区域`,
+3. 【聊天记录区】— 对话区域中间部分，显示历史聊天气泡的区域
+
+## 输出格式（严格遵守）
+只输出三行 <bbox> 标签，不要 JSON、不要 markdown 代码块、不要任何解释或列表：
+<bbox>x1,y1,x2,y2</bbox>
+<bbox>x1,y1,x2,y2</bbox>
+<bbox>x1,y1,x2,y2</bbox>`,
     targets: ['【搜索输入框】', '【对话窗口header区域】', '【聊天记录区】']
   },
   wework: {
@@ -438,7 +469,13 @@ const LAYOUT_DETECT_PROMPTS: Record<'weixin' | 'wework', { prompt: string; targe
 帮我框选以下三个区域，每个区域用 <bbox>x1,y1,x2,y2</bbox> 格式，坐标范围 0-1000：
 1. 【搜索输入框】— 中间消息列表顶部的搜索栏
 2. 【右侧聊天区顶部】— 右侧聊天区最顶上一条，显示当前聊天人/群名
-3. 【聊天记录区】— 右侧聊天区中间部分，显示聊天气泡的区域`,
+3. 【聊天记录区】— 右侧聊天区中间部分，显示聊天气泡的区域
+
+## 输出格式（严格遵守）
+只输出三行 <bbox> 标签，不要 JSON、不要 markdown 代码块、不要任何解释或列表：
+<bbox>x1,y1,x2,y2</bbox>
+<bbox>x1,y1,x2,y2</bbox>
+<bbox>x1,y1,x2,y2</bbox>`,
     targets: ['【搜索输入框】', '【右侧聊天区顶部】', '【聊天记录区】']
   }
 }
