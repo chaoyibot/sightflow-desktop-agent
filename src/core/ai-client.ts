@@ -209,7 +209,9 @@ export class AIClient {
   /** 带完整配置的底层调用（fallback 用） */
   private async callAPIWith(messages: any[], model: string, baseURL: string, apiKey: string): Promise<any> {
     const url = `${baseURL}/chat/completions`
-    const TIMEOUT_MS = 30_000 // 30 秒超时
+    // Hermes api_server 走完整 agent 循环，实测 17s+，放宽到 120s；直连模型保持 30s
+    const isHermes = url.includes('127.0.0.1') || url.includes('localhost')
+    const TIMEOUT_MS = isHermes ? 120_000 : 30_000
     const callStart = Date.now()
 
     // 计算 payload 大小（粗略，不重复序列化）

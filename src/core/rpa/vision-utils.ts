@@ -56,42 +56,32 @@ export function clearLayoutCache(appType: AppType): void {
 // ── BBox / Point 解析 ──
 
 /**
- * 从 VLM 返回文本中解析所有 <bbox> 标签
+ * 从 VLM 返回文本中解析所有 bbox 标签
  * 支持格式:
  *   - <bbox>x1,y1,x2,y2</bbox>  (逗号分隔)
  *   - <bbox>x1 y1 x2 y2</bbox>  (空格分隔)
+ *   - <bounding_box_1>x1,y1,x2,y2</bounding_box_1>  (agnes 等模型输出变体)
  * 坐标为归一化 0-1000
  */
 export function parseBBoxes(text: string): BBox[] {
   if (!text) return []
   const bboxes: BBox[] = []
 
-  // 1. 先尝试逗号分隔格式（标准格式）
-  let regex = /<bbox>\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*<\/bbox>/gi
+  // 通用标签匹配：<任意标签名> 内含 4 个数字（逗号或空格分隔）
+  // 兼容 <bbox>、<bounding_box_1>、<bounding_box> 等
+  const regex = /<([a-z_0-9]+)>\s*([\d.]+)\s*[,，\s]\s*([\d.]+)\s*[,，\s]\s*([\d.]+)\s*[,，\s]\s*([\d.]+)\s*<\/\1>/gi
   let match: RegExpExecArray | null
 
   while ((match = regex.exec(text)) !== null) {
-    const x1 = Number(match[1])
-    const y1 = Number(match[2])
-    const x2 = Number(match[3])
-    const y2 = Number(match[4])
+    const tag = match[1].toLowerCase()
+    // 只接受 bbox 类标签
+    if (!tag.includes('bbox') && !tag.includes('bounding')) continue
+    const x1 = Number(match[2])
+    const y1 = Number(match[3])
+    const x2 = Number(match[4])
+    const y2 = Number(match[5])
     if ([x1, y1, x2, y2].every((v) => Number.isFinite(v))) {
       bboxes.push([Math.round(x1), Math.round(y1), Math.round(x2), Math.round(y2)])
-    }
-  }
-
-  // 2. 如果没有找到逗号分隔的格式，尝试空格分隔
-  if (bboxes.length === 0) {
-    regex = /<bbox>\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*<\/bbox>/gi
-
-    while ((match = regex.exec(text)) !== null) {
-      const x1 = Number(match[1])
-      const y1 = Number(match[2])
-      const x2 = Number(match[3])
-      const y2 = Number(match[4])
-      if ([x1, y1, x2, y2].every((v) => Number.isFinite(v))) {
-        bboxes.push([Math.round(x1), Math.round(y1), Math.round(x2), Math.round(y2)])
-      }
     }
   }
 

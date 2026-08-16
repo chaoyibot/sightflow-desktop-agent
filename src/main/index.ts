@@ -99,6 +99,22 @@ app.whenReady().then(async () => {
       const DOUBAO_FALLBACK = { model: 'doubao-seed-2.0-lite', baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3', apiKey: '74f1d573-a75a-4cbc-9018-84965afa6de7' }
       const isAgnes = String(effectiveVisionModel).toLowerCase().includes('agnes')
       const fallbackVision = isAgnes ? DOUBAO_FALLBACK : undefined
+
+      // ⚠️ 2026-08-16 架构修复：视觉检测与回复生成分离
+      // - 布局检测/红点检测（VLM 高频调用，需快速 + 精确 bbox）→ 永远直连 agnes→doubao
+      //   Hermes 走完整 agent 循环 17s+ 且输出自然语言不返回 bbox，布局检测用它必超时
+      // - 回复生成（getReply，需语义理解）→ 跟随用户选的引擎（hermes 接管时走 Hermes）
+      const AGNES_VISION = {
+        apiKey: 'sk-YxmHWNWM97UiK2JDwm63KL6swaSwSUVA6jZW3bniz2UIVHkU',
+        model: 'agnes-2.5-flash',
+        baseURL: 'https://api.agnes-ai.cn/v1',
+        visionModel: 'agnes-2.5-flash'
+      }
+      const visionConfig = isAgnes
+        ? { ...AGNES_VISION, fallbackVision: DOUBAO_FALLBACK }
+        : { apiKey: config.apiKey, model: config.model, baseURL: config.baseURL, visionModel: effectiveVisionModel, fallbackVision }
+
+      // 回复生成：跟随 aiEngine
       localHooks = new LocalHooks({
         ai: {
           apiKey: config.apiKey,
@@ -112,14 +128,8 @@ app.whenReady().then(async () => {
       })
       const device = new RPADevice()
       device.setAppType(config.appType || 'weixin')
-      // 传完整配置：主模型用于文本回复，visionModel 固定为视觉模型（VLM 布局检测必须支持图片输入）
-      device.setAiConfig({
-        apiKey: config.apiKey,
-        model: config.model,
-        baseURL: config.baseURL,
-        visionModel: effectiveVisionModel,
-        fallbackVision
-      })
+      // 视觉检测（布局/红点）用独立配置：直连 agnes→doubao
+      device.setAiConfig(visionConfig)
       const mainWindow = BrowserWindow.getAllWindows()[0]
       engine = new Engine(localHooks, device, (type, content) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -162,14 +172,11 @@ app.whenReady().then(async () => {
       if (engine && (config.visionModel || config.model)) {
         const effectiveVisionModel = config.visionModel || config.model
         const isAgnes = String(effectiveVisionModel).toLowerCase().includes('agnes')
-        const fallbackVision = isAgnes ? { model: 'doubao-seed-2.0-lite', baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3', apiKey: '74f1d573-a75a-4cbc-9018-84965afa6de7' } : undefined
-        ;(engine as any).device?.setAiConfig?.({
-          apiKey: config.apiKey,
-          model: config.model,
-          baseURL: config.baseURL,
-          visionModel: effectiveVisionModel,
-          fallbackVision
-        })
+        // 视觉检测永远直连 agnes→doubao（不回退到 Hermes，避免布局检测超时）
+        const visionConfig = isAgnes
+          ? { apiKey: 'sk-YxmHWNWM97UiK2JDwm63KL6swaSwSUVA6jZW3bniz2UIVHkU', model: 'agnes-2.5-flash', baseURL: 'https://api.agnes-ai.cn/v1', visionModel: 'agnes-2.5-flash', fallbackVision: { model: 'doubao-seed-2.0-lite', baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3', apiKey: '74f1d573-a75a-4cbc-9018-84965afa6de7' } }
+          : { apiKey: config.apiKey, model: config.model, baseURL: config.baseURL, visionModel: effectiveVisionModel }
+        ;(engine as any).device?.setAiConfig?.(visionConfig)
       }
       // 运行中切换回复模式（auto/manual 即时生效）
       if (engine && config.replyMode) {
