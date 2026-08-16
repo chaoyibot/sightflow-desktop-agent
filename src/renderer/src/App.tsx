@@ -172,7 +172,11 @@ function BottomBar({
       model: settings?.model || undefined,
       baseURL: settings?.baseURL || undefined,
       systemPrompt: settings?.systemPrompt || undefined,
-      appType: settings?.appType || 'weixin'
+      appType: settings?.appType || 'weixin',
+      // 2026-08-16 修复：之前漏传这两个字段 → 启动时引擎永远拿 undefined
+      // → replyMode 退回 auto（手动模式失效）、scheduledPosts 退回 0 条（定时发布全丢）
+      replyMode: settings?.replyMode === 'manual' ? 'manual' : 'auto',
+      scheduledPosts: Array.isArray(settings?.scheduledPosts) ? settings.scheduledPosts : []
     }
 
     const result = await window.electron?.invoke('engine:start', config)

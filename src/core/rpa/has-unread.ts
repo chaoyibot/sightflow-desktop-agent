@@ -116,7 +116,10 @@ export async function isChatContactUnread(
   firstContact?: { bbox: BBox; coordinates: [number, number] }
   error?: string
 }> {
-  const THRESHOLD = 4         // 4% 红点占比阈值
+  // 2026-08-16 修复：阈值从 4% 降到 2%
+  // 实测红点占比 2.66%~3.52% 被 4% 卡掉 → 判无红点 → 引擎放弃切换不回复
+  // 粗检测阈值 1% 都能判有，细检测 4% 明显过严
+  const THRESHOLD = 2         // 2% 红点占比阈值
   const NO_RED_THRESHOLD = 0.5 // 低于此值认为没有红点
   const MAX_RETRIES = 2
   const EXPAND_STEP = 0.1     // 每次扩展 10%
