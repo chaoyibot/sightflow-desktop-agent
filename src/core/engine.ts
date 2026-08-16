@@ -332,9 +332,44 @@ export class Engine {
         continue
       }
 
+      // 2026-08-16 修复：点击前记录聊天区 baseline，点击后验证是否真的切换成功
+      // 症状：VLM 定位 firstContact 不稳定（y 漂移 63px+），点击点空 → 聊天区空白
+      // → AI 截图 10KB 只能 [SKIP] → 红点不消失 → 无限死循环
+      // 验证方式：点击后聊天区内容变化 = 切换成功；无变化 = 点空，清缓存强制重定位再试
+      await this.device.setChatBaseline()
+
       this.emitLog('thinking', `点击联系人 (${firstContactCoords[0]}, ${firstContactCoords[1]})`)
       await this.device.clickUnreadContact(firstContactCoords)
       await this.sleep(500 + Math.random() * 300)
+
+      // 验证切换是否成功：聊天区是否变化
+      const switchCheck = await this.device.hasChatAreaChanged()
+      if (!switchCheck.hasDiff) {
+        this.emitLog('skip', '点击后聊天区无变化（可能点空），清除缓存强制重新定位')
+        this.device.clearUnreadCache()
+        this.device.clearChatBaseline()
+
+        // 重新 VLM 定位 firstContact 并再点一次（只重试一次，避免死循环）
+        const retryContact = await this.device.isChatContactUnread()
+        if (retryContact.isUnread && retryContact.firstContactCoords) {
+          await this.sleep(500)
+          this.emitLog('thinking', `重定位后再次点击联系人 (${retryContact.firstContactCoords[0]}, ${retryContact.firstContactCoords[1]})`)
+          await this.device.clickUnreadContact(retryContact.firstContactCoords)
+          await this.sleep(500 + Math.random() * 300)
+
+          const retrySwitch = await this.device.hasChatAreaChanged()
+          if (!retrySwitch.hasDiff) {
+            this.emitLog('skip', '重定位后点击仍无变化，放弃本轮，继续轮询')
+            this.device.clearChatBaseline()
+            continue
+          }
+          this.device.clearChatBaseline()
+        } else {
+          this.emitLog('skip', '重定位后未获取到有效联系人，继续轮询')
+          this.device.clearChatBaseline()
+          continue
+        }
+      }
 
       // 切换了联系人 → 清除旧 baseline（新对话需要新的 baseline）
       this.device.clearChatBaseline()
