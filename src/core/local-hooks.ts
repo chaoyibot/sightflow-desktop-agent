@@ -8,14 +8,14 @@ import { AgentHooks, MessageContext, ReplyAction, ActionItem, ActionResult } fro
 import { AIClient, AIClientConfig } from './ai-client'
 
 export interface LocalHooksConfig {
-  ai: Partial<AIClientConfig> & { apiKey: string }
+  ai: Partial<AIClientConfig> & { apiKey: string; fallbackVision?: Partial<AIClientConfig> }
 }
 
 export class LocalHooks implements AgentHooks {
   private aiClient: AIClient
 
   constructor(config: LocalHooksConfig) {
-    this.aiClient = new AIClient(config.ai)
+    this.aiClient = new AIClient(config.ai, config.ai.fallbackVision)
   }
 
   async onEngineStart(): Promise<void> {

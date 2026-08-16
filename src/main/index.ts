@@ -95,6 +95,10 @@ app.whenReady().then(async () => {
     if (engine?.isRunning()) return { success: false, error: '引擎已在运行中' }
     try {
       const effectiveVisionModel = config.visionModel || config.model || 'doubao-seed-2.0-lite'
+      // 2026-08-16：图片识别回退 — 视觉模型是 agnes 时，失败自动切火山 doubao
+      const DOUBAO_FALLBACK = { model: 'doubao-seed-2.0-lite', baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3', apiKey: '74f1d573-a75a-4cbc-9018-84965afa6de7' }
+      const isAgnes = String(effectiveVisionModel).toLowerCase().includes('agnes')
+      const fallbackVision = isAgnes ? DOUBAO_FALLBACK : undefined
       localHooks = new LocalHooks({
         ai: {
           apiKey: config.apiKey,
@@ -102,7 +106,8 @@ app.whenReady().then(async () => {
           baseURL: config.baseURL,
           systemPrompt: config.systemPrompt,
           // 主回复也是截图视觉任务，必须用支持图片输入的模型
-          visionModel: effectiveVisionModel
+          visionModel: effectiveVisionModel,
+          fallbackVision
         }
       })
       const device = new RPADevice()
@@ -112,7 +117,8 @@ app.whenReady().then(async () => {
         apiKey: config.apiKey,
         model: config.model,
         baseURL: config.baseURL,
-        visionModel: effectiveVisionModel
+        visionModel: effectiveVisionModel,
+        fallbackVision
       })
       const mainWindow = BrowserWindow.getAllWindows()[0]
       engine = new Engine(localHooks, device, (type, content) => {
@@ -154,11 +160,15 @@ app.whenReady().then(async () => {
       }
       // 运行中更新 RPA 设备的 AI 配置（visionModel 变更即时生效）
       if (engine && (config.visionModel || config.model)) {
+        const effectiveVisionModel = config.visionModel || config.model
+        const isAgnes = String(effectiveVisionModel).toLowerCase().includes('agnes')
+        const fallbackVision = isAgnes ? { model: 'doubao-seed-2.0-lite', baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3', apiKey: '74f1d573-a75a-4cbc-9018-84965afa6de7' } : undefined
         ;(engine as any).device?.setAiConfig?.({
           apiKey: config.apiKey,
           model: config.model,
           baseURL: config.baseURL,
-          visionModel: config.visionModel || config.model || undefined
+          visionModel: effectiveVisionModel,
+          fallbackVision
         })
       }
       // 运行中切换回复模式（auto/manual 即时生效）

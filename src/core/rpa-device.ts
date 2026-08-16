@@ -36,14 +36,14 @@ export class RPADevice implements DesktopDevice {
     this.appType = appType
   }
 
-  setAiConfig(config: { apiKey: string; model?: string; baseURL?: string; visionModel?: string }): void {
+  setAiConfig(config: { apiKey: string; model?: string; baseURL?: string; visionModel?: string; fallbackVision?: Partial<{ apiKey: string; model?: string; baseURL?: string; visionModel?: string }> }): void {
     if (!config?.apiKey) return
     this.aiClient = new AIClient({
       apiKey: config.apiKey,
       model: config.model,
       baseURL: config.baseURL,
       visionModel: config.visionModel
-    })
+    }, config.fallbackVision)
   }
 
   // ── 感知层 ──
