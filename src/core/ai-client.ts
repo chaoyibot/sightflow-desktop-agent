@@ -15,6 +15,36 @@ export interface AIClientConfig {
   visionModel?: string
 }
 
+// ── AI 引擎预设（settings.aiEngine 切换，自动填充 baseURL/apiKey/model） ──
+export type AIEngine = 'hermes' | 'volcano' | 'agnes'
+
+export const AI_ENGINE_PRESETS: Record<AIEngine, { label: string; model: string; baseURL: string; apiKey: string; visionModel?: string }> = {
+  // Hermes 接管：本地 api_server（OpenAI 兼容），Hermes 内部用辅助视觉模型看图
+  hermes: {
+    label: '🤖 Hermes 接管',
+    model: 'hermes-agent',
+    baseURL: 'http://127.0.0.1:8642/v1',
+    apiKey: 'desk-94d6e3df-3446-4f2f-880e-cd4164c86907',
+    visionModel: 'hermes-agent'
+  },
+  // 火山方舟 doubao（默认，现有配置）
+  volcano: {
+    label: '🌋 火山方舟 doubao',
+    model: 'doubao-seed-2.0-lite',
+    baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3',
+    apiKey: '74f1d573-a75a-4cbc-9018-84965afa6de7',
+    visionModel: 'doubao-seed-2.0-lite'
+  },
+  // Agnes（用户自更新配置，地址待确认后填入）
+  agnes: {
+    label: '✨ Agnes',
+    model: 'agnes-2.5-flash',
+    baseURL: '',
+    apiKey: 'sk-YxmHWNWM97UiK2JDwm63KL6swaSwSUVA6jZW3bniz2UIVHkU',
+    visionModel: 'agnes-2.5-flash'
+  }
+}
+
 // Coding Plan 通道默认值（模型名用官方支持的 doubao-seed-2.0-lite）
 const DEFAULT_MODEL = 'doubao-seed-2.0-lite'
 const DEFAULT_BASE_URL = 'https://ark.cn-beijing.volces.com/api/coding/v3'

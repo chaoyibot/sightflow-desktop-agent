@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { t } from './i18n'
+import { AI_ENGINE_PRESETS } from '../../core/ai-client'
 import logoUrl from './assets/logo.png'
 import './index.css'
 
@@ -171,6 +172,7 @@ function BottomBar({
       apiKey,
       model: settings?.model || undefined,
       baseURL: settings?.baseURL || undefined,
+      visionModel: settings?.visionModel || settings?.model || undefined,
       systemPrompt: settings?.systemPrompt || undefined,
       appType: settings?.appType || 'weixin',
       // 2026-08-16 修复：之前漏传这两个字段 → 启动时引擎永远拿 undefined
@@ -284,6 +286,9 @@ function SettingsPanel() {
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('doubao-seed-2.0-lite')
   const [baseURL, setBaseURL] = useState('')
+  const [visionModel, setVisionModel] = useState('doubao-seed-2.0-lite')
+  // AI 引擎：hermes=Hermes 接管（本地 api_server）；volcano=火山方舟；agnes=Agnes
+  const [aiEngine, setAiEngine] = useState<'hermes' | 'volcano' | 'agnes'>('volcano')
   const [systemPrompt, setSystemPrompt] = useState('')
   const [appType, setAppType] = useState<'weixin' | 'wework'>('weixin')
   const [replyMode, setReplyMode] = useState<'auto' | 'manual'>('auto')
@@ -307,6 +312,8 @@ function SettingsPanel() {
         setApiKey(settings.apiKey || '')
         setModel(settings.model || 'doubao-seed-2.0-lite')
         setBaseURL(settings.baseURL || '')
+        setVisionModel(settings.visionModel || settings.model || 'doubao-seed-2.0-lite')
+        setAiEngine((settings.aiEngine === 'hermes' || settings.aiEngine === 'agnes') ? settings.aiEngine : 'volcano')
         setSystemPrompt(settings.systemPrompt || '')
         setAppType(settings.appType || 'weixin')
         setReplyMode(settings.replyMode === 'manual' ? 'manual' : 'auto')
@@ -323,6 +330,18 @@ function SettingsPanel() {
   }, [])
 
   // ── 角色模板操作 ──
+
+  /** 切换 AI 引擎：自动填充对应引擎的 baseURL / apiKey / model / visionModel */
+  const switchEngine = useCallback((engine: 'hermes' | 'volcano' | 'agnes') => {
+    setAiEngine(engine)
+    const preset = AI_ENGINE_PRESETS[engine]
+    if (preset) {
+      setBaseURL(preset.baseURL)
+      setApiKey(preset.apiKey)
+      setModel(preset.model)
+      setVisionModel(preset.visionModel || preset.model)
+    }
+  }, [])
 
   /** 应用选中模板到 prompt 输入框（不自动保存，用户可编辑后再保存） */
   const applyTemplate = useCallback((name: string) => {
@@ -444,6 +463,8 @@ function SettingsPanel() {
       apiKey,
       model,
       baseURL,
+      visionModel,
+      aiEngine,
       systemPrompt,
       appType,
       replyMode,
@@ -454,6 +475,7 @@ function SettingsPanel() {
       apiKey: apiKey || undefined,
       model: model || undefined,
       baseURL: baseURL || undefined,
+      visionModel: visionModel || undefined,
       systemPrompt: systemPrompt || undefined,
       appType,
       replyMode,
@@ -466,7 +488,7 @@ function SettingsPanel() {
         : t('settings.saved'),
       'success'
     )
-  }, [apiKey, model, baseURL, systemPrompt, appType, replyMode, scheduledPosts, generatedPlan])
+  }, [apiKey, model, baseURL, visionModel, aiEngine, systemPrompt, appType, replyMode, scheduledPosts, generatedPlan])
 
   const handleTestConnection = useCallback(async () => {
     if (!apiKey) return
@@ -493,6 +515,26 @@ function SettingsPanel() {
     <div className="slide-up">
       <div className="card">
         <div className="card-title">{t('settings.ai')}</div>
+
+        <div className="form-group">
+          <label className="form-label">🤖 AI 引擎</label>
+          <select
+            className="form-input"
+            value={aiEngine}
+            onChange={(e) => switchEngine(e.target.value as any)}
+          >
+            <option value="volcano">🌋 火山方舟 doubao（本地直连）</option>
+            <option value="hermes">🤖 Hermes 接管（本地 api_server）</option>
+            <option value="agnes">✨ Agnes</option>
+          </select>
+          <div className="form-hint">
+            {aiEngine === 'hermes'
+              ? 'Hermes 接管模式：截图发给本机 Hermes api_server (127.0.0.1:8642)，由 Hermes 生成回复（可调用记忆/工具）'
+              : aiEngine === 'agnes'
+                ? 'Agnes 模式：直连 Agnes API（需配置正确的 baseURL）'
+                : '火山方舟 doubao 直连（默认，最快）'}
+          </div>
+        </div>
 
         <div className="form-group">
           <label className="form-label">应用类型</label>
@@ -671,6 +713,17 @@ function SettingsPanel() {
             placeholder={t('settings.model.placeholder')}
           />
           <div className="form-hint">支持 doubao-seed-2.1-turbo / doubao-seed-2.0-lite / minimax-m3 / glm-5.2 / deepseek-v4-flash / kimi-k2.7-code（需支持图片输入）</div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">视觉模型（VLM，截图/布局检测用）</label>
+          <input
+            className="form-input"
+            value={visionModel}
+            onChange={(e) => setVisionModel(e.target.value)}
+            placeholder="doubao-seed-2.0-lite"
+          />
+          <div className="form-hint">布局检测 + 截图回复都用这个模型，必须支持图片输入；通常与主模型一致</div>
         </div>
 
         <div className="form-group">

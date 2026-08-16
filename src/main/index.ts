@@ -11,7 +11,7 @@ import { RPADevice } from '../core/rpa-device'
 const StoreClass = typeof Store === 'function' ? Store : ((Store as any).default as typeof Store)
 const settingsStore = new StoreClass({
   name: 'settings',
-  defaults: { apiKey: '', model: '', baseURL: '', systemPrompt: '', locale: 'zh', promptTemplates: [], replyMode: 'auto', scheduledPosts: [] }
+  defaults: { apiKey: '', model: '', baseURL: '', visionModel: '', aiEngine: 'volcano', systemPrompt: '', locale: 'zh', promptTemplates: [], replyMode: 'auto', scheduledPosts: [] }
 })
 
 let engine: Engine | null = null
@@ -94,6 +94,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('engine:start', async (_event, config) => {
     if (engine?.isRunning()) return { success: false, error: '引擎已在运行中' }
     try {
+      const effectiveVisionModel = config.visionModel || config.model || 'doubao-seed-2.0-lite'
       localHooks = new LocalHooks({
         ai: {
           apiKey: config.apiKey,
@@ -101,7 +102,7 @@ app.whenReady().then(async () => {
           baseURL: config.baseURL,
           systemPrompt: config.systemPrompt,
           // 主回复也是截图视觉任务，必须用支持图片输入的模型
-          visionModel: config.visionModel || 'doubao-seed-2.0-lite'
+          visionModel: effectiveVisionModel
         }
       })
       const device = new RPADevice()
@@ -111,7 +112,7 @@ app.whenReady().then(async () => {
         apiKey: config.apiKey,
         model: config.model,
         baseURL: config.baseURL,
-        visionModel: config.visionModel || 'doubao-seed-2.0-lite'
+        visionModel: effectiveVisionModel
       })
       const mainWindow = BrowserWindow.getAllWindows()[0]
       engine = new Engine(localHooks, device, (type, content) => {
@@ -146,9 +147,19 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('engine:updateConfig', async (_event, config) => {
     if (localHooks) {
+      // 整个 config 透传（含 visionModel / apiKey / baseURL / model）
       localHooks.updateAIConfig(config)
       if (engine && config.appType) {
         (engine as any).device?.setAppType(config.appType)
+      }
+      // 运行中更新 RPA 设备的 AI 配置（visionModel 变更即时生效）
+      if (engine && (config.visionModel || config.model)) {
+        ;(engine as any).device?.setAiConfig?.({
+          apiKey: config.apiKey,
+          model: config.model,
+          baseURL: config.baseURL,
+          visionModel: config.visionModel || config.model || undefined
+        })
       }
       // 运行中切换回复模式（auto/manual 即时生效）
       if (engine && config.replyMode) {
