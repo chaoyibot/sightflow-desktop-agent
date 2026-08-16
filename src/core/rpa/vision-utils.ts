@@ -61,13 +61,14 @@ export function clearLayoutCache(appType: AppType): void {
  *   - <bbox>x1,y1,x2,y2</bbox>  (逗号分隔)
  *   - <bbox>x1 y1 x2 y2</bbox>  (空格分隔)
  *   - <bounding_box_1>x1,y1,x2,y2</bounding_box_1>  (agnes 等模型输出变体)
+ *   - <point name="xxx" x1=".." y1=".." x2=".." y2=".."/>  (agnes 属性式自闭合变体)
  * 坐标为归一化 0-1000
  */
 export function parseBBoxes(text: string): BBox[] {
   if (!text) return []
   const bboxes: BBox[] = []
 
-  // 通用标签匹配：<任意标签名> 内含 4 个数字（逗号或空格分隔）
+  // 1. 通用标签匹配：<任意标签名> 内含 4 个数字（逗号或空格分隔）
   // 兼容 <bbox>、<bounding_box_1>、<bounding_box> 等
   const regex = /<([a-z_0-9]+)>\s*([\d.]+)\s*[,，\s]\s*([\d.]+)\s*[,，\s]\s*([\d.]+)\s*[,，\s]\s*([\d.]+)\s*<\/\1>/gi
   let match: RegExpExecArray | null
@@ -82,6 +83,23 @@ export function parseBBoxes(text: string): BBox[] {
     const y2 = Number(match[5])
     if ([x1, y1, x2, y2].every((v) => Number.isFinite(v))) {
       bboxes.push([Math.round(x1), Math.round(y1), Math.round(x2), Math.round(y2)])
+    }
+  }
+
+  // 2. 属性式自闭合标签：<point name="xxx" x1=".." y1=".." x2=".." y2=".."/>
+  //    agnes 对检测 prompt 的常见输出变体
+  if (bboxes.length === 0) {
+    const attrRegex = /<([a-z_0-9]+)\s+[^>]*?\bx1\s*=\s*["']?\s*([\d.]+)\s*["']?[^>]*?\by1\s*=\s*["']?\s*([\d.]+)\s*["']?[^>]*?\bx2\s*=\s*["']?\s*([\d.]+)\s*["']?[^>]*?\by2\s*=\s*["']?\s*([\d.]+)\s*["']?[^>]*?\/?>/gi
+    while ((match = attrRegex.exec(text)) !== null) {
+      const tag = match[1].toLowerCase()
+      if (!tag.includes('bbox') && !tag.includes('bounding') && !tag.includes('point') && !tag.includes('box')) continue
+      const x1 = Number(match[2])
+      const y1 = Number(match[3])
+      const x2 = Number(match[4])
+      const y2 = Number(match[5])
+      if ([x1, y1, x2, y2].every((v) => Number.isFinite(v))) {
+        bboxes.push([Math.round(x1), Math.round(y1), Math.round(x2), Math.round(y2)])
+      }
     }
   }
 
