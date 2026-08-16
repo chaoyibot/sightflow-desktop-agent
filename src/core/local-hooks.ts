@@ -9,13 +9,26 @@ import { AIClient, AIClientConfig } from './ai-client'
 
 export interface LocalHooksConfig {
   ai: Partial<AIClientConfig> & { apiKey: string; fallbackVision?: Partial<AIClientConfig> }
+  /** 视觉模型配置（doubao 固定）— 用于布局检测 + 截图内容提取 */
+  vision?: Partial<AIClientConfig> & { apiKey?: string }
+  /** 是否 Hermes 接管模式：视觉提取 → 纯文本决策 */
+  hermesMode?: boolean
 }
 
 export class LocalHooks implements AgentHooks {
   private aiClient: AIClient
+  private visionClient: AIClient | null
+  private hermesMode: boolean
 
   constructor(config: LocalHooksConfig) {
     this.aiClient = new AIClient(config.ai, config.ai.fallbackVision)
+    this.visionClient = config.vision?.apiKey ? new AIClient(config.vision) : null
+    this.hermesMode = config.hermesMode || false
+  }
+
+  /** 判断当前是否为 Hermes 接管模式 */
+  isHermesMode(): boolean {
+    return this.hermesMode
   }
 
   async onEngineStart(): Promise<void> {
@@ -56,7 +69,25 @@ export class LocalHooks implements AgentHooks {
     yield { type: 'thinking', content: '正在分析聊天内容...' }
 
     try {
-      // Phase 3 真实网络请求闭环
+      // Hermes 接管模式：doubao 视觉提取聊天内容 → Hermes 纯文本决策
+      // （Hermes 不处理图片，避免 17-25s 的 agent 循环，回复速度快）
+      if (this.hermesMode && this.visionClient) {
+        yield { type: 'thinking', content: '正在用视觉模型提取聊天内容...' }
+        const extracted = await this.visionClient.extractChatContent(context.screenshot)
+        console.log('[LocalHooks] 视觉提取结果:', extracted.slice(0, 200))
+
+        yield { type: 'thinking', content: 'Hermes 正在思考回复...' }
+        const reply = await this.aiClient.replyFromExtractedContent(extracted)
+
+        if (!reply) {
+          yield { type: 'skip' }
+          return
+        }
+        yield { type: 'text', content: reply }
+        return
+      }
+
+      // 普通模式：直接发截图给 AI
       const reply = await this.aiClient.getReply(context.screenshot)
 
       if (!reply) {

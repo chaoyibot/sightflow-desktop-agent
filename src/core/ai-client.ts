@@ -106,6 +106,52 @@ export class AIClient {
   }
 
   /**
+   * 视觉提取聊天内容（doubao 视觉模型）：截图 → 结构化文本描述
+   * 供 Hermes 接管模式使用：先把截图内容提取成文本，再交给 Hermes 纯文本决策
+   */
+  async extractChatContent(screenshotBase64: string): Promise<string> {
+    console.log('[AIClient] extractChatContent 开始（视觉提取聊天内容）...')
+    const EXTRACT_PROMPT = `你是聊天记录提取器。请仔细分析这张聊天截图，提取以下信息，用纯文本输出：
+
+## 输出格式
+【发送方】: 内容
+（每条消息一行，按时间从上到下）
+
+## 要求
+1. 区分发送方：左侧气泡=对方（客户），右侧气泡=我
+2. 完整保留每条消息的文字内容（不要省略、不要改写）
+3. 如果截图中有系统消息、群公告、红包、转账等，单独标注
+4. 最后明确输出一行：最后一条消息发送方=【我/对方/系统】
+5. 只输出提取结果，不要任何解释`
+    const text = await this.callVision(
+      '你是一个聊天记录提取器。',
+      EXTRACT_PROMPT,
+      screenshotBase64
+    )
+    console.log(`[AIClient] extractChatContent 完成 (${text.length} 字符)`)
+    return text.trim()
+  }
+
+  /**
+   * 纯文本决策（Hermes 接管模式用）：把提取的聊天内容发给回复引擎，生成回复
+   * 主引擎为 Hermes 时走此路径 —— 不传图片，Hermes 只做语言决策，速度快
+   */
+  async replyFromExtractedContent(extractedText: string): Promise<string | null> {
+    const startTime = Date.now()
+    try {
+      console.log('[AIClient] replyFromExtractedContent 开始（纯文本决策）...')
+      const replyText = await this.callText(this.config.systemPrompt + '\n\n以下是已提取的聊天内容：\n' + extractedText)
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+      console.log(`[AIClient] replyFromExtractedContent 完成 (${elapsed}s):`, replyText?.slice(0, 100))
+      if (!replyText || replyText.trim() === '[SKIP]') return null
+      return replyText.trim()
+    } catch (error: any) {
+      console.error('[AIClient] 纯文本决策失败:', error?.message || error)
+      throw error
+    }
+  }
+
+  /**
    * VLM 视觉检测 — 发送截图 + prompt，获取 bbox/point 文本
    * 供 vision-utils.ts 调用
    */

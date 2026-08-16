@@ -94,42 +94,36 @@ app.whenReady().then(async () => {
   ipcMain.handle('engine:start', async (_event, config) => {
     if (engine?.isRunning()) return { success: false, error: '引擎已在运行中' }
     try {
-      const effectiveVisionModel = config.visionModel || config.model || 'doubao-seed-2.0-lite'
-      // 2026-08-16：图片识别回退 — 视觉模型是 agnes 时，失败自动切火山 doubao
-      const DOUBAO_FALLBACK = { model: 'doubao-seed-2.0-lite', baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3', apiKey: '74f1d573-a75a-4cbc-9018-84965afa6de7' }
-      const isAgnes = String(effectiveVisionModel).toLowerCase().includes('agnes')
-      const fallbackVision = isAgnes ? DOUBAO_FALLBACK : undefined
-
-      // ⚠️ 2026-08-16 架构修复：视觉检测与回复生成分离
-      // - 布局检测/红点检测（VLM 高频调用，需快速 + 精确 bbox）→ 永远直连 agnes→doubao
-      //   Hermes 走完整 agent 循环 17s+ 且输出自然语言不返回 bbox，布局检测用它必超时
-      // - 回复生成（getReply，需语义理解）→ 跟随用户选的引擎（hermes 接管时走 Hermes）
-      const AGNES_VISION = {
-        apiKey: 'sk-YxmHWNWM97UiK2JDwm63KL6swaSwSUVA6jZW3bniz2UIVHkU',
-        model: 'agnes-2.5-flash',
-        baseURL: 'https://api.agnes-ai.cn/v1',
-        visionModel: 'agnes-2.5-flash'
+      // 2026-08-16 用户定稿架构：
+      // - 视觉模型固定用 doubao（布局检测/红点检测/截图内容提取）—— 快速、输出 bbox 精确
+      // - Hermes 只负责回复语言内容（纯文本决策，不处理图片，避免 17-25s agent 循环）
+      // - 用户选 agnes 时：回复生成走 agnes（视觉仍 doubao）
+      const DOUBAO_VISION = {
+        apiKey: '74f1d573-a75a-4cbc-9018-84965afa6de7',
+        model: 'doubao-seed-2.0-lite',
+        baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3',
+        visionModel: 'doubao-seed-2.0-lite'
       }
-      const visionConfig = isAgnes
-        ? { ...AGNES_VISION, fallbackVision: DOUBAO_FALLBACK }
-        : { apiKey: config.apiKey, model: config.model, baseURL: config.baseURL, visionModel: effectiveVisionModel, fallbackVision }
+      const isHermes = String(config.model || '').toLowerCase().includes('hermes-agent')
+      const isAgnes = String(config.model || '').toLowerCase().includes('agnes')
 
-      // 回复生成：跟随 aiEngine
+      // 回复生成：跟随 aiEngine（hermes → 本地 api_server 纯文本；agnes → agnes；默认 doubao）
       localHooks = new LocalHooks({
         ai: {
           apiKey: config.apiKey,
           model: config.model,
           baseURL: config.baseURL,
           systemPrompt: config.systemPrompt,
-          // 主回复也是截图视觉任务，必须用支持图片输入的模型
-          visionModel: effectiveVisionModel,
-          fallbackVision
-        }
+          visionModel: DOUBAO_VISION.visionModel
+        },
+        // 视觉提取：固定 doubao（Hermes 模式用）
+        vision: DOUBAO_VISION,
+        hermesMode: isHermes
       })
       const device = new RPADevice()
       device.setAppType(config.appType || 'weixin')
-      // 视觉检测（布局/红点）用独立配置：直连 agnes→doubao
-      device.setAiConfig(visionConfig)
+      // 视觉检测（布局/红点 VLM）固定 doubao
+      device.setAiConfig(DOUBAO_VISION)
       const mainWindow = BrowserWindow.getAllWindows()[0]
       engine = new Engine(localHooks, device, (type, content) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -163,20 +157,24 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('engine:updateConfig', async (_event, config) => {
     if (localHooks) {
+      // 2026-08-16 定稿：视觉固定 doubao，回复引擎跟随用户选择
+      const DOUBAO_VISION = {
+        apiKey: '74f1d573-a75a-4cbc-9018-84965afa6de7',
+        model: 'doubao-seed-2.0-lite',
+        baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3',
+        visionModel: 'doubao-seed-2.0-lite'
+      }
       // 整个 config 透传（含 visionModel / apiKey / baseURL / model）
       localHooks.updateAIConfig(config)
+      // 更新 hermesMode（运行中切换引擎即时生效）
+      const isHermesNow = String(config.model || '').toLowerCase().includes('hermes-agent')
+      ;(localHooks as any).hermesMode = isHermesNow
       if (engine && config.appType) {
         (engine as any).device?.setAppType(config.appType)
       }
-      // 运行中更新 RPA 设备的 AI 配置（visionModel 变更即时生效）
-      if (engine && (config.visionModel || config.model)) {
-        const effectiveVisionModel = config.visionModel || config.model
-        const isAgnes = String(effectiveVisionModel).toLowerCase().includes('agnes')
-        // 视觉检测永远直连 agnes→doubao（不回退到 Hermes，避免布局检测超时）
-        const visionConfig = isAgnes
-          ? { apiKey: 'sk-YxmHWNWM97UiK2JDwm63KL6swaSwSUVA6jZW3bniz2UIVHkU', model: 'agnes-2.5-flash', baseURL: 'https://api.agnes-ai.cn/v1', visionModel: 'agnes-2.5-flash', fallbackVision: { model: 'doubao-seed-2.0-lite', baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3', apiKey: '74f1d573-a75a-4cbc-9018-84965afa6de7' } }
-          : { apiKey: config.apiKey, model: config.model, baseURL: config.baseURL, visionModel: effectiveVisionModel }
-        ;(engine as any).device?.setAiConfig?.(visionConfig)
+      // 视觉检测固定 doubao（布局/红点 VLM 不受引擎切换影响）
+      if (engine) {
+        ;(engine as any).device?.setAiConfig?.(DOUBAO_VISION)
       }
       // 运行中切换回复模式（auto/manual 即时生效）
       if (engine && config.replyMode) {
