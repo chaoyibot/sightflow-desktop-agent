@@ -176,3 +176,9 @@ npm run build:mac    # macOS 安装包
 ## 📄 License
 
 本项目基于上游 [SightFlow.dev](https://sightflow.dev/) 改进，遵循上游开源协议。
+
+---
+
+## 💖 Support
+
+Enjoying this? Please ⭐ star it, or [buy me a coffee ☕](https://afdian.com/a/dg1688) — support the AI automation journey. More on [ClawChat](https://clawling.com/u/usr_01KXT5GF70ESESJQZNB06AJQ9B).
