@@ -8,6 +8,7 @@ import { Engine } from '../core/engine'
 import { LocalHooks } from '../core/local-hooks'
 import { AIClient } from '../core/ai-client'
 import { RPADevice } from '../core/rpa-device'
+import { startHttpApi } from './http-api'
 const StoreClass = typeof Store === 'function' ? Store : ((Store as any).default as typeof Store)
 const settingsStore = new StoreClass({
   name: 'settings',
@@ -16,6 +17,101 @@ const settingsStore = new StoreClass({
 
 let engine: Engine | null = null
 let localHooks: LocalHooks | null = null
+
+/**
+ * 启动引擎（UI 的 engine:start 与本地 HTTP API 共用）
+ * config 缺省字段从 settingsStore 读取
+ */
+async function startEngine(config?: Record<string, unknown>): Promise<{ success: boolean; error?: string }> {
+  if (engine?.isRunning()) return { success: false, error: '引擎已在运行中' }
+  try {
+    const stored = settingsStore.store as Record<string, unknown>
+    const cfg: Record<string, any> = {
+      apiKey: stored.apiKey || '',
+      model: stored.model || '',
+      baseURL: stored.baseURL || '',
+      visionModel: stored.visionModel || '',
+      aiEngine: stored.aiEngine || 'volcano',
+      systemPrompt: stored.systemPrompt || '',
+      replyMode: stored.replyMode || 'auto',
+      appType: stored.appType || 'weixin',
+      scheduledPosts: stored.scheduledPosts || [],
+      promptTemplates: stored.promptTemplates || [],
+      ...(config || {})
+    }
+    // 2026-08-16 用户定稿架构：
+    // - 视觉模型固定用 doubao（布局检测/红点检测/截图内容提取）—— 快速、输出 bbox 精确
+    // - Hermes 只负责回复语言内容（纯文本决策，不处理图片，避免 17-25s agent 循环）
+    // - 用户选 agnes 时：回复生成走 agnes（视觉仍 doubao）
+    // - ⚠️ doubao 有 5 小时用量配额（429 AccountQuotaExceeded），失败自动回退 agnes
+    const DOUBAO_VISION = {
+      apiKey: '74f1d...e7',
+      model: 'doubao-seed-2.0-lite',
+      baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3',
+      visionModel: 'doubao-seed-2.0-lite'
+    }
+    const AGNES_FALLBACK = {
+      apiKey: '«reda...…»',
+      model: 'agnes-2.5-flash',
+      baseURL: 'https://api.agnes-ai.cn/v1',
+      visionModel: 'agnes-2.5-flash'
+    }
+    const isHermes = String(cfg.model || '').toLowerCase().includes('hermes-agent')
+
+    // 回复生成：跟随 aiEngine（hermes → 本地 api_server 纯文本；agnes → agnes；默认 doubao）
+    localHooks = new LocalHooks({
+      ai: {
+        apiKey: cfg.apiKey,
+        model: cfg.model,
+        baseURL: cfg.baseURL,
+        systemPrompt: cfg.systemPrompt,
+        visionModel: DOUBAO_VISION.visionModel
+      },
+      // 视觉提取：doubao 优先，agnes 兜底（配额超限自动切换）
+      vision: { ...DOUBAO_VISION, fallbackVision: AGNES_FALLBACK },
+      hermesMode: isHermes
+    })
+    const device = new RPADevice()
+    device.setAppType(cfg.appType || 'weixin')
+    // 视觉检测（布局/红点 VLM）doubao 优先，agnes 兜底
+    device.setAiConfig({ ...DOUBAO_VISION, fallbackVision: AGNES_FALLBACK })
+    const mainWindow = BrowserWindow.getAllWindows()[0]
+    engine = new Engine(localHooks, device, (type, content) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('engine:log', { type, content })
+      }
+    })
+    // 回复模式：auto=AI 自动发送；manual=AI 只粘贴，用户手动点发送
+    engine.setReplyMode(cfg.replyMode === 'manual' ? 'manual' : 'auto')
+    // 定时发布任务列表
+    engine.setScheduledPosts(cfg.scheduledPosts || [])
+
+    engine.start().catch((err: any) => {
+      console.error('[Main] Engine loop error:', err)
+    })
+
+    // 启动确认：轮询等待引擎进入主循环（布局测量通常 2~15 秒）
+    // 若期间引擎退出（measureLayout 失败）则返回具体失败原因
+    const deadline = Date.now() + 20_000
+    while (Date.now() < deadline) {
+      if (engine.isRunning()) {
+        return { success: true }
+      }
+      const failure = engine.getStartFailure()
+      if (failure) {
+        return { success: false, error: `引擎启动失败: ${failure}` }
+      }
+      await new Promise((r) => setTimeout(r, 800))
+    }
+    const failure = engine.getStartFailure()
+    if (failure) {
+      return { success: false, error: `引擎启动失败: ${failure}` }
+    }
+    return { success: false, error: '引擎启动超时（20 秒内未进入主循环）' }
+  } catch (error: any) {
+    return { success: false, error: error?.message || String(error) }
+  }
+}
 
 function createWindow(): void {
   // Create the browser window.
@@ -92,63 +188,7 @@ app.whenReady().then(async () => {
 
   // ── Engine 操控 ──
   ipcMain.handle('engine:start', async (_event, config) => {
-    if (engine?.isRunning()) return { success: false, error: '引擎已在运行中' }
-    try {
-      // 2026-08-16 用户定稿架构：
-      // - 视觉模型固定用 doubao（布局检测/红点检测/截图内容提取）—— 快速、输出 bbox 精确
-      // - Hermes 只负责回复语言内容（纯文本决策，不处理图片，避免 17-25s agent 循环）
-      // - 用户选 agnes 时：回复生成走 agnes（视觉仍 doubao）
-      // - ⚠️ doubao 有 5 小时用量配额（429 AccountQuotaExceeded），失败自动回退 agnes
-      const DOUBAO_VISION = {
-        apiKey: '74f1d573-a75a-4cbc-9018-84965afa6de7',
-        model: 'doubao-seed-2.0-lite',
-        baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3',
-        visionModel: 'doubao-seed-2.0-lite'
-      }
-      const AGNES_FALLBACK = {
-        apiKey: 'sk-YxmHWNWM97UiK2JDwm63KL6swaSwSUVA6jZW3bniz2UIVHkU',
-        model: 'agnes-2.5-flash',
-        baseURL: 'https://api.agnes-ai.cn/v1',
-        visionModel: 'agnes-2.5-flash'
-      }
-      const isHermes = String(config.model || '').toLowerCase().includes('hermes-agent')
-
-      // 回复生成：跟随 aiEngine（hermes → 本地 api_server 纯文本；agnes → agnes；默认 doubao）
-      localHooks = new LocalHooks({
-        ai: {
-          apiKey: config.apiKey,
-          model: config.model,
-          baseURL: config.baseURL,
-          systemPrompt: config.systemPrompt,
-          visionModel: DOUBAO_VISION.visionModel
-        },
-        // 视觉提取：doubao 优先，agnes 兜底（配额超限自动切换）
-        vision: { ...DOUBAO_VISION, fallbackVision: AGNES_FALLBACK },
-        hermesMode: isHermes
-      })
-      const device = new RPADevice()
-      device.setAppType(config.appType || 'weixin')
-      // 视觉检测（布局/红点 VLM）doubao 优先，agnes 兜底
-      device.setAiConfig({ ...DOUBAO_VISION, fallbackVision: AGNES_FALLBACK })
-      const mainWindow = BrowserWindow.getAllWindows()[0]
-      engine = new Engine(localHooks, device, (type, content) => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('engine:log', { type, content })
-        }
-      })
-      // 回复模式：auto=AI 自动发送；manual=AI 只粘贴，用户手动点发送
-      engine.setReplyMode(config.replyMode === 'manual' ? 'manual' : 'auto')
-      // 定时发布任务列表
-      engine.setScheduledPosts(config.scheduledPosts || [])
-      
-      engine.start().catch((err: any) => {
-        console.error('[Main] Engine loop error:', err)
-      })
-      
-      return { success: true }
-    } catch (error: any) {
-      return { success: false, error: error?.message || String(error) }
-    }
+    return startEngine(config)
   })
 
   ipcMain.handle('engine:stop', async () => {
@@ -289,6 +329,13 @@ ${description}
   })
 
   createWindow()
+
+  // ── 本地 HTTP API（语音小宝/Hermes 遥控桥） ──
+  startHttpApi({
+    getEngine: () => engine,
+    getSettings: () => settingsStore as any,
+    startEngine
+  })
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the

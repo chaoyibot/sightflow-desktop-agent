@@ -27,6 +27,8 @@ export class Engine {
   private running = false
   private consecutiveUnreadFailures = 0
   private replyMode: 'auto' | 'manual' = 'auto'
+  /** 启动失败原因（measureLayout 失败时记录，供 API 查询） */
+  private startFailure: string | null = null
   /** 定时发布任务列表 */
   private scheduledPosts: ScheduledPost[] = []
   /** 已发送记录: taskId -> 日期字符串，防止同一天重复发送 */
@@ -72,12 +74,14 @@ export class Engine {
       const measureResult = await this.device.measureLayout()
 
       if (!measureResult.success) {
+        this.startFailure = measureResult.error || '布局测量失败'
         this.emitLog('error', (measureResult.error || '布局测量失败') + '，引擎无法启动')
         this.running = false
         await this.hooks.onEngineStop?.()
         return
       }
 
+      this.startFailure = null
       this.emitLog('thinking', '布局测量完成 ✓')
 
       // ── 主循环 ──
@@ -112,6 +116,49 @@ export class Engine {
 
   isRunning() {
     return this.running
+  }
+
+  /** 启动失败原因（null = 成功进入主循环） */
+  getStartFailure(): string | null {
+    return this.startFailure
+  }
+
+  // ── 本地 HTTP API 支撑（语音遥控/外部脚本调用） ──
+
+  /** 在当前激活的聊天窗口直接发送消息（不经过大模型） */
+  async sendDirectMessage(text: string, autoSend = true): Promise<void> {
+    await this.device.sendMessage(text, autoSend)
+    this.emitLog('reply', `📨 API 手动发送: ${text.slice(0, 50)}...`)
+  }
+
+  /** 未读检测（供 API 查询） */
+  async checkUnreadForApi(): Promise<{
+    hasUnread: boolean
+    chatEntranceArea?: { bbox: unknown; coordinates: [number, number] }
+  }> {
+    const r = await this.device.hasUnreadMessage()
+    return { hasUnread: r.hasUnread, chatEntranceArea: r.chatEntranceArea }
+  }
+
+  /** 手动触发某条定时发布任务（立即发送，不等待到点） */
+  async triggerScheduledPost(id: string): Promise<{ success: boolean; error?: string }> {
+    const post = this.scheduledPosts.find((p) => p.id === id)
+    if (!post) {
+      return { success: false, error: `未找到计划: ${id}` }
+    }
+    if (!this.running) {
+      return { success: false, error: '引擎未运行' }
+    }
+    try {
+      // 定时发布是主动营销，始终直接发送
+      await this.device.sendMessage(post.content, true)
+      this.sentToday.set(post.id, new Date().toDateString())
+      this.emitLog('reply', `⏰ API 手动触发定时发布: ${post.content.slice(0, 50)}...`)
+      return { success: true }
+    } catch (e: any) {
+      this.emitLog('error', `定时发布触发失败: ${String(e?.message || e)}`)
+      return { success: false, error: String(e?.message || e) }
+    }
   }
 
   // ── 定时发布 ──
