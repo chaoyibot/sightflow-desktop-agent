@@ -45,13 +45,13 @@ async function startEngine(config?: Record<string, unknown>): Promise<{ success:
     // - 用户选 agnes 时：回复生成走 agnes（视觉仍 doubao）
     // - ⚠️ doubao 有 5 小时用量配额（429 AccountQuotaExceeded），失败自动回退 agnes
     const DOUBAO_VISION = {
-      apiKey: '74f1d...e7',
+      apiKey: '74f1d573-a75a-4cbc-9018-84965afa6de7',
       model: 'doubao-seed-2.0-lite',
       baseURL: 'https://ark.cn-beijing.volces.com/api/coding/v3',
       visionModel: 'doubao-seed-2.0-lite'
     }
     const AGNES_FALLBACK = {
-      apiKey: '«reda...…»',
+      apiKey: 'sk-YxmHWNWM97UiK2JDwm63KL6swaSwSUVA6jZW3bniz2UIVHkU',
       model: 'agnes-2.5-flash',
       baseURL: 'https://api.agnes-ai.cn/v1',
       visionModel: 'agnes-2.5-flash'
@@ -59,15 +59,19 @@ async function startEngine(config?: Record<string, unknown>): Promise<{ success:
     const isHermes = String(cfg.model || '').toLowerCase().includes('hermes-agent')
 
     // 回复生成：跟随 aiEngine（hermes → 本地 api_server 纯文本；agnes → agnes；默认 doubao）
+    // ⚠️ visionModel 必须与 baseURL 成套（AIClient 视觉调用共用 config.baseURL）：
+    //    用户引擎=agnes 时若仍硬编码 doubao 模型 → agnes API 503 model_not_found
+    //    因此 visionModel 跟随用户配置（settings.visionModel），失败时兜底 doubao（火山）
     localHooks = new LocalHooks({
       ai: {
         apiKey: cfg.apiKey,
         model: cfg.model,
         baseURL: cfg.baseURL,
         systemPrompt: cfg.systemPrompt,
-        visionModel: DOUBAO_VISION.visionModel
+        visionModel: cfg.visionModel || cfg.model || DOUBAO_VISION.visionModel,
+        fallbackVision: { ...DOUBAO_VISION }
       },
-      // 视觉提取：doubao 优先，agnes 兜底（配额超限自动切换）
+      // 视觉提取（布局/红点检测）：doubao 优先，agnes 兜底（配额超限自动切换）
       vision: { ...DOUBAO_VISION, fallbackVision: AGNES_FALLBACK },
       hermesMode: isHermes
     })
