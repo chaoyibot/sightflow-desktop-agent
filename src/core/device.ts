@@ -75,6 +75,9 @@ export interface DesktopDevice {
   /** 发送消息（clipboard paste + enter）；autoSend=false 时只粘贴不发送（手动模式） */
   sendMessage(text: string, autoSend?: boolean): Promise<void>
 
+  /** 按姓名搜索并打开联系人聊天窗口（语音遥控"给XX发微信"） */
+  openChatByName(name: string): Promise<{ success: boolean; error?: string }>
+
   /**
    * 点击红点区域激活未读消息（视觉路线）
    * 微信场景双击，企业微信场景单击

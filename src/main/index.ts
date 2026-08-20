@@ -338,7 +338,22 @@ ${description}
   startHttpApi({
     getEngine: () => engine,
     getSettings: () => settingsStore as any,
-    startEngine
+    startEngine,
+    captureScreen: async () => {
+      try {
+        const sources = await desktopCapturer.getSources({
+          types: ['screen'],
+          thumbnailSize: { width: 1920, height: 1080 }
+        })
+        if (sources && sources.length > 0) {
+          return sources[0].thumbnail.toDataURL()
+        }
+        return null
+      } catch (error) {
+        console.error('Screen capture failed:', error)
+        return null
+      }
+    }
   })
 
   app.on('activate', function () {

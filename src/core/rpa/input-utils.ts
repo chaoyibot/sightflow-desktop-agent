@@ -8,7 +8,7 @@ const IS_MAC = process.platform === 'darwin'
 import { delay, randomDelayIn, getRobot } from './util'
 
 // 原版 whatsapp-agent-demo 的贝塞尔曲线仿人滑动
-async function humanLikeMove(
+export async function humanLikeMove(
   targetX: number,
   targetY: number,
   options: {

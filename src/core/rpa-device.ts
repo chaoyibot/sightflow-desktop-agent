@@ -10,6 +10,7 @@ import { AppType } from './rpa/types'
 import { BBox } from './rpa/vision-utils'
 import { takeWeChatScreenshot } from './rpa/screenshot-utils'
 import { sendReplyAction, activeUnreadByClickAction, clickUnreadContactAction } from './rpa/input-utils'
+import { openChatByNameAction } from './rpa/contact-search'
 import {
   hasUnreadMessage as hasUnreadMessageDetect,
   isChatContactUnread as isChatContactUnreadDetect
@@ -239,6 +240,17 @@ export class RPADevice implements DesktopDevice {
     if (!success) {
       throw new Error('发送消息失败')
     }
+  }
+
+  /**
+   * 按姓名搜索并打开联系人聊天窗口（语音遥控"给XX发微信"）
+   * 视觉流程：点搜索框 → 粘贴姓名 → VLM 定位第一个结果 → 点击
+   */
+  async openChatByName(name: string): Promise<{ success: boolean; error?: string }> {
+    if (!this.aiClient) {
+      return { success: false, error: 'AI Client 未初始化（请先启动引擎）' }
+    }
+    return openChatByNameAction(this.aiClient, this.appType, name)
   }
 
   /**

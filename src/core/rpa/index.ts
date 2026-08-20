@@ -2,6 +2,7 @@ export { captureWechatWindow, takeWeChatScreenshot, calculateRedDotPercentage, c
 export type { AppType } from './types'
 export { getWindowInfo, getWechatWindowInfo } from './window-utils'
 export { sendReplyAction, activeUnreadByClickAction, clickUnreadContactAction } from './input-utils'
+export { openChatByNameAction } from './contact-search'
 export { compareImages, hasImageChanged, setChatBaseline, clearChatBaseline, hasChatBaseline, checkChatAreaDiff } from './image-compare'
 export { hasUnreadMessage, isChatContactUnread } from './has-unread'
 export {

@@ -28,6 +28,8 @@ export interface HttpApiContext {
   }
   /** 启动引擎（复用主进程 startEngine 逻辑） */
   startEngine: (config?: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>
+  /** 截取当前屏幕（desktopCapturer，Session 1 桌面） */
+  captureScreen?: () => Promise<string | null>
 }
 
 const PORT = 8766
@@ -128,6 +130,21 @@ export function startHttpApi(ctx: HttpApiContext): void {
         }
       }
 
+      // ── POST /api/chat/open ──
+      if (method === 'POST' && path === '/api/chat/open') {
+        const engine = ctx.getEngine()
+        if (!engine?.isRunning()) {
+          return sendJson(res, 400, { success: false, error: '引擎未运行' })
+        }
+        const body = await readBody(req)
+        const name = String(body.name || '').trim()
+        if (!name) {
+          return sendJson(res, 400, { success: false, error: '缺少 name 字段' })
+        }
+        const result = await engine.openChatByName(name)
+        return sendJson(res, result.success ? 200 : 400, result)
+      }
+
       // ── GET /api/unread ──
       if (method === 'GET' && path === '/api/unread') {
         const engine = ctx.getEngine()
@@ -165,6 +182,18 @@ export function startHttpApi(ctx: HttpApiContext): void {
         const sanitized: Record<string, unknown> = { ...store }
         delete sanitized.apiKey
         return sendJson(res, 200, { success: true, settings: sanitized })
+      }
+
+      // ── GET /api/screenshot（调试/遥控：返回当前屏幕 base64） ──
+      if (method === 'GET' && path === '/api/screenshot') {
+        if (!ctx.captureScreen) {
+          return sendJson(res, 400, { success: false, error: 'captureScreen 未提供' })
+        }
+        const dataUrl = await ctx.captureScreen()
+        if (!dataUrl) {
+          return sendJson(res, 500, { success: false, error: '截图失败' })
+        }
+        return sendJson(res, 200, { success: true, dataUrl })
       }
 
       return sendJson(res, 404, { success: false, error: `not found: ${method} ${path}` })

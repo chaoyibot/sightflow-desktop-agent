@@ -131,6 +131,20 @@ export class Engine {
     this.emitLog('reply', `📨 API 手动发送: ${text.slice(0, 50)}...`)
   }
 
+  /** 按姓名搜索并打开联系人聊天（语音遥控"给XX发微信"） */
+  async openChatByName(name: string): Promise<{ success: boolean; error?: string }> {
+    if (!this.running) {
+      return { success: false, error: '引擎未运行' }
+    }
+    const result = await this.device.openChatByName(name)
+    if (result.success) {
+      this.emitLog('reply', `👤 API 打开联系人: ${name}`)
+    } else {
+      this.emitLog('error', `打开联系人失败: ${result.error}`)
+    }
+    return result
+  }
+
   /** 未读检测（供 API 查询） */
   async checkUnreadForApi(): Promise<{
     hasUnread: boolean
