@@ -21,6 +21,39 @@ const screenshotCache = new Map<string, ScreenshotCache>()
 const screenshotPendingPromises = new Map<string, Promise<ScreenshotCache | null>>()
 const SCREENSHOT_CACHE_DURATION = 100 // 100ms
 
+/**
+ * 压缩截图（VLM 兼容）：agnes 等视觉 API 对图片大小有上限（~160KB 全屏 PNG 会 500 加载失败）
+ * 策略：最长边 ≤ 1280px + JPEG 质量 80（约 30-60KB）
+ * 直接用 Electron NativeImage 的 resize + toJPEG（jimp 在 Electron 主进程 read Buffer 报 MIME 错误，弃用）
+ * 红点像素检测走 nativeImage 局部 crop（不经此压缩），不受影响
+ */
+async function compressScreenshot(
+  nativeImage: Electron.NativeImage,
+  maxSize = 1280,
+  quality = 80
+): Promise<string> {
+  try {
+    const { width, height } = nativeImage.getSize()
+    if (!width || !height) {
+      // 窗口最小化/不可见时 crop 出的 nativeImage 为空，直接报错避免空图发给 VLM
+      throw new Error('截图为空（目标窗口可能最小化或不可见）')
+    }
+    const scale = Math.min(1, maxSize / Math.max(width, height))
+    let img = nativeImage
+    if (scale < 1) {
+      img = nativeImage.resize({
+        width: Math.round(width * scale),
+        height: Math.round(height * scale)
+      })
+    }
+    const jpeg = img.toJPEG(quality)
+    return `data:image/jpeg;base64,${jpeg.toString('base64')}`
+  } catch (error) {
+    console.warn('[screenshot-utils] 截图压缩失败，退回原图:', error?.message)
+    return nativeImage.toDataURL()
+  }
+}
+
 function getCropHash(crop?: { x: number; y: number; width: number; height: number }): string {
   if (!crop) return 'no-crop'
   return `${crop.x}-${crop.y}-${crop.width}-${crop.height}`
@@ -137,7 +170,8 @@ export async function captureWechatWindow(
         }
 
         const croppedNativeImage = matchedScreenSource.thumbnail.crop(cropRect)
-        const croppedScreenshot = croppedNativeImage.toDataURL()
+        // 压缩后再缓存（VLM 兼容，避免 agnes 大图 500）
+        const croppedScreenshot = await compressScreenshot(croppedNativeImage)
 
         const resultBounds = crop ? { x: bounds.x + crop.x, y: bounds.y + crop.y, width: crop.width, height: crop.height } : bounds
         const cacheResult: ScreenshotCache = {

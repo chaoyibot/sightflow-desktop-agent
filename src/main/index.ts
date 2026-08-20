@@ -12,7 +12,7 @@ import { startHttpApi } from './http-api'
 const StoreClass = typeof Store === 'function' ? Store : ((Store as any).default as typeof Store)
 const settingsStore = new StoreClass({
   name: 'settings',
-  defaults: { apiKey: '', model: '', baseURL: '', visionModel: '', aiEngine: 'volcano', systemPrompt: '', locale: 'zh', promptTemplates: [], replyMode: 'auto', scheduledPosts: [] }
+  defaults: { apiKey: '', model: '', baseURL: '', visionModel: '', aiEngine: 'volcano', systemPrompt: '', locale: 'zh', promptTemplates: [], replyMode: 'auto', engineMode: 'auto', scheduledPosts: [] }
 })
 
 let engine: Engine | null = null
@@ -34,6 +34,7 @@ async function startEngine(config?: Record<string, unknown>): Promise<{ success:
       aiEngine: stored.aiEngine || 'volcano',
       systemPrompt: stored.systemPrompt || '',
       replyMode: stored.replyMode || 'auto',
+      engineMode: stored.engineMode || 'auto',
       appType: stored.appType || 'weixin',
       scheduledPosts: stored.scheduledPosts || [],
       promptTemplates: stored.promptTemplates || [],
@@ -87,6 +88,8 @@ async function startEngine(config?: Record<string, unknown>): Promise<{ success:
     })
     // 回复模式：auto=AI 自动发送；manual=AI 只粘贴，用户手动点发送
     engine.setReplyMode(cfg.replyMode === 'manual' ? 'manual' : 'auto')
+    // 运行模式：auto=自动回复；specified=指定回复（待命只响应 API/语音）
+    engine.setEngineMode(cfg.engineMode === 'specified' ? 'specified' : 'auto')
     // 定时发布任务列表
     engine.setScheduledPosts(cfg.scheduledPosts || [])
 
@@ -94,16 +97,17 @@ async function startEngine(config?: Record<string, unknown>): Promise<{ success:
       console.error('[Main] Engine loop error:', err)
     })
 
-    // 启动确认：轮询等待引擎进入主循环（布局测量通常 2~15 秒）
-    // 若期间引擎退出（measureLayout 失败）则返回具体失败原因
-    const deadline = Date.now() + 20_000
+    // 启动确认：轮询等待引擎完成布局测量并进入主循环/待命（2~15 秒）
+    // ⚠️ 不能只看 isRunning()（start 开头即 true，measureLayout 失败会随后退出）
+    //    必须等 startCompleted=true 才算真正启动成功；startFailure 出现则返回失败
+    const deadline = Date.now() + 30_000
     while (Date.now() < deadline) {
-      if (engine.isRunning()) {
-        return { success: true }
-      }
       const failure = engine.getStartFailure()
       if (failure) {
         return { success: false, error: `引擎启动失败: ${failure}` }
+      }
+      if (engine.isRunning() && engine.getStartCompleted()) {
+        return { success: true }
       }
       await new Promise((r) => setTimeout(r, 800))
     }
@@ -111,7 +115,7 @@ async function startEngine(config?: Record<string, unknown>): Promise<{ success:
     if (failure) {
       return { success: false, error: `引擎启动失败: ${failure}` }
     }
-    return { success: false, error: '引擎启动超时（20 秒内未进入主循环）' }
+    return { success: false, error: '引擎启动超时（30 秒内未完成布局测量）' }
   } catch (error: any) {
     return { success: false, error: error?.message || String(error) }
   }
@@ -235,6 +239,10 @@ app.whenReady().then(async () => {
       // 运行中切换回复模式（auto/manual 即时生效）
       if (engine && config.replyMode) {
         engine.setReplyMode(config.replyMode === 'manual' ? 'manual' : 'auto')
+      }
+      // 运行中切换运行模式（auto=自动回复 / specified=指定回复 即时生效）
+      if (engine && config.engineMode) {
+        engine.setEngineMode(config.engineMode === 'specified' ? 'specified' : 'auto')
       }
       // 运行中更新定时发布任务（即时生效）
       if (engine && Array.isArray(config.scheduledPosts)) {

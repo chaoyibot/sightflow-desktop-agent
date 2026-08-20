@@ -27,8 +27,16 @@ export class Engine {
   private running = false
   private consecutiveUnreadFailures = 0
   private replyMode: 'auto' | 'manual' = 'auto'
+  /**
+   * 运行模式：
+   * - auto      = 自动回复模式：主循环检测未读 → AI 自动回复（现有行为）
+   * - specified = 指定回复模式：引擎待命不自动回复，只响应 API/语音指定操作
+   */
+  private engineMode: 'auto' | 'specified' = 'auto'
   /** 启动失败原因（measureLayout 失败时记录，供 API 查询） */
   private startFailure: string | null = null
+  /** 启动是否完成（measureLayout 成功进入主循环/待命后置 true，供 API 确认） */
+  private startCompleted = false
   /** 定时发布任务列表 */
   private scheduledPosts: ScheduledPost[] = []
   /** 已发送记录: taskId -> 日期字符串，防止同一天重复发送 */
@@ -51,6 +59,16 @@ export class Engine {
     return this.replyMode
   }
 
+  /** 设置运行模式：auto=自动回复；specified=指定回复（待命，只响应 API/语音指定） */
+  setEngineMode(mode: 'auto' | 'specified') {
+    this.engineMode = mode === 'specified' ? 'specified' : 'auto'
+    console.log(`[Engine] 运行模式已切换: ${this.engineMode === 'specified' ? '指定回复(待命)' : '自动回复'}`)
+  }
+
+  getEngineMode(): 'auto' | 'specified' {
+    return this.engineMode
+  }
+
   private emitLog(type: 'thinking' | 'reply' | 'skip' | 'error', content: string) {
     if (this.onLog) this.onLog(type, content)
     else console.log(`[Engine-${type}] ${content}`)
@@ -58,6 +76,7 @@ export class Engine {
 
   async start() {
     this.running = true
+    this.startCompleted = false
     await this.hooks.onEngineStart?.()
 
     // 启动定时发布调度器（每 30 秒检查一次）
@@ -82,7 +101,18 @@ export class Engine {
       }
 
       this.startFailure = null
+      this.startCompleted = true
       this.emitLog('thinking', '布局测量完成 ✓')
+
+      // ── 指定回复模式：不跑自动回复主循环，只待命等待 API/语音指定操作 ──
+      if (this.engineMode === 'specified') {
+        this.emitLog('thinking', '指定回复模式：引擎待命，等待指定操作（语音/API 遥控）...')
+        while (this.running) {
+          await this.sleep(1000)
+        }
+        await this.hooks.onEngineStop?.()
+        return
+      }
 
       // ── 主循环 ──
       while (this.running) {
@@ -121,6 +151,11 @@ export class Engine {
   /** 启动失败原因（null = 成功进入主循环） */
   getStartFailure(): string | null {
     return this.startFailure
+  }
+
+  /** 启动是否已完成（measureLayout 成功后 true） */
+  getStartCompleted(): boolean {
+    return this.startCompleted
   }
 
   // ── 本地 HTTP API 支撑（语音遥控/外部脚本调用） ──

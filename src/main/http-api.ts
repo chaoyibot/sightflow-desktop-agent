@@ -89,8 +89,24 @@ export function startHttpApi(ctx: HttpApiContext): void {
         return sendJson(res, 200, {
           success: true,
           running: engine?.isRunning() ?? false,
-          replyMode: engine?.getReplyMode() ?? null
+          replyMode: engine?.getReplyMode() ?? null,
+          engineMode: engine?.getEngineMode() ?? null
         })
+      }
+
+      // ── POST /api/engine/mode（运行中切换：auto=自动回复 / specified=指定回复） ──
+      if (method === 'POST' && path === '/api/engine/mode') {
+        const engine = ctx.getEngine()
+        if (!engine?.isRunning()) {
+          return sendJson(res, 400, { success: false, error: '引擎未运行' })
+        }
+        const body = await readBody(req)
+        const mode = String(body.mode || '')
+        if (mode !== 'auto' && mode !== 'specified') {
+          return sendJson(res, 400, { success: false, error: 'mode 必须是 auto 或 specified' })
+        }
+        engine.setEngineMode(mode)
+        return sendJson(res, 200, { success: true, engineMode: mode })
       }
 
       // ── POST /api/engine/start ──

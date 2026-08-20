@@ -292,6 +292,8 @@ function SettingsPanel() {
   const [systemPrompt, setSystemPrompt] = useState('')
   const [appType, setAppType] = useState<'weixin' | 'wework'>('weixin')
   const [replyMode, setReplyMode] = useState<'auto' | 'manual'>('auto')
+  // 运行模式：auto=自动回复；specified=指定回复（引擎待命，只响应语音/API 指定）
+  const [engineMode, setEngineMode] = useState<'auto' | 'specified'>('auto')
   // 定时发布任务
   const [scheduledPosts, setScheduledPosts] = useState<{ id: string; time: string; content: string; enabled: boolean }[]>([])
   const [postTime, setPostTime] = useState('09:00')
@@ -317,6 +319,7 @@ function SettingsPanel() {
         setSystemPrompt(settings.systemPrompt || '')
         setAppType(settings.appType || 'weixin')
         setReplyMode(settings.replyMode === 'manual' ? 'manual' : 'auto')
+        setEngineMode(settings.engineMode === 'specified' ? 'specified' : 'auto')
         if (Array.isArray(settings.scheduledPosts)) {
           setScheduledPosts(settings.scheduledPosts)
         }
@@ -468,6 +471,7 @@ function SettingsPanel() {
       systemPrompt,
       appType,
       replyMode,
+      engineMode,
       scheduledPosts: posts
     })
 
@@ -479,6 +483,7 @@ function SettingsPanel() {
       systemPrompt: systemPrompt || undefined,
       appType,
       replyMode,
+      engineMode,
       scheduledPosts: posts
     })
 
@@ -560,6 +565,22 @@ function SettingsPanel() {
           </select>
           <div className="form-hint">
             手动模式下：AI 把回复内容粘贴到微信输入框，但不会自动发送，你确认后手动点发送按钮
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">运行模式</label>
+          <select
+            className="form-input"
+            value={engineMode}
+            onChange={(e) => setEngineMode(e.target.value as any)}
+          >
+            <option value="auto">🔄 自动回复模式（检测未读自动回复）</option>
+            <option value="specified">🎯 指定回复模式（待命，只听语音/遥控指令）</option>
+          </select>
+          <div className="form-hint">
+            自动回复模式：引擎自动扫描未读并 AI 回复，适合群管理。
+            指定回复模式：引擎不自动回复任何消息，只执行你明确指定的操作（如语音说"给王总发微信…"），避免 AI 乱回复客户
           </div>
         </div>
 
